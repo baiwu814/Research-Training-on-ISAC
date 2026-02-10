@@ -1,0 +1,593 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{xeCJK}
+% 如果你的系统中装了黑体、宋体，可以直接指定（可选）
+% \setCJKmainfont{SimSun}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{hyperref}
+
+% 针对中文支持，如果您在本地编译，建议使用 xelatex 引擎并取消下面几行的注释
+% \usepackage{xeCJK}
+% \setCJKmainfont{SimSun} % 或者您系统中的其他中文字体
+
+\begin{document}
+
+\title{WiDRa - 利用载波相位在 Wi-Fi 中实现毫米级差分测距精度}
+
+\author{Vishnu V. Ratnam, \IEEEmembership{Senior Member, IEEE}, Bilal Sadiq, \IEEEmembership{Member, IEEE}, Hao Chen, \IEEEmembership{Member, IEEE}, \\
+Wei Sun, \IEEEmembership{Member, IEEE}, Shunyao Wu, \IEEEmembership{Member, IEEE}, Boon L. Ng, \IEEEmembership{Member, IEEE}, \\
+Jianzhong (Charlie) Zhang, \IEEEmembership{Fellow, IEEE}
+\thanks{本文已被 IEEE Journal on Selected Areas in Communications 录用发表。}
+\thanks{所有作者均任职于美国德克萨斯州普莱诺的三星美国研究中心标准与移动创新实验室 (Standards and Mobility Innovation Lab, Samsung Research America)。(e-mail: ratnamvishnuvardhan@gmail.com).}
+}
+
+\maketitle
+
+\begin{abstract}
+尽管 Wi-Fi 是许多测距应用的理想技术，但当前方法的性能受限于系统带宽 (System Bandwidth)，导致精度较低，约为 1 米。对于许多应用而言，测量差分距离 (Differential Range)，即相邻测量之间距离的变化，就已经足够了。相应地，本文提出了 WiDRa——一种基于 Wi-Fi 的差分测距解决方案，它利用和载波相位 (Sum-Carrier-Phase) 信息提供差分距离估计。所提出的方法不受系统带宽限制，并且可以跟踪甚至小于载波波长的距离变化。本文首先在考虑了影响 Wi-Fi 芯片的各种硬件损伤 (Hardware Impairments) 的情况下，从理论上证明了该方法的合理性。在此过程中，提出了将和载波相位从硬件损伤中分离出来的方法。广泛的仿真结果表明，在莱斯因子 (Rician-factor) $\ge 7$ 的信道中，WiDRa 可以实现约 1 毫米的差分距离估计均方根误差 (RMSE)（比现有方法提高 100 倍）。所提出的方法也在商用现货 (Off-the-shelf) Wi-Fi 硬件上进行了验证，以证明其可行性，在实际验证中实现了小于 1 毫米的差分距离 RMSE。最后，本文指出了当前研究的局限性并提出了未来的探索方向，以进一步挖掘 WiDRa 的潜力。
+\end{abstract}
+
+\begin{IEEEkeywords}
+Wi-Fi, Wi-Fi 测距 (Wi-Fi Ranging), 差分测距 (Differential Ranging), 定位 (Localization), 载波相位 (Carrier Phase), 智能家居 (Smart Home), 载波频率偏移估计 (CFO Estimation).
+\end{IEEEkeywords}
+
+\section{引言}
+\IEEEPARstart{随}{着}无线基础设施和个人无线设备的增长，无线测距的需求在过去十年中迅速增加。无线测距涉及寻找两个无线设备之间的距离（也称为 Range），它是大多数定位/位置服务解决方案 [1] 的关键步骤，在邻近检测 (Proximity Detection)、无线传感 (Wireless Sensing) 等其他应用中也很有用。用例非常丰富，包括智能家居和建筑、环境感知、监控、灾害管理、工业、医疗保健等。相应地，已经提出了几种不同的测距技术，利用超宽带 (UWB) [2]、激光雷达 (Lidar) [3]、全球导航卫星系统 (GNSS) [4]、超声波 [5]、蓝牙 [6], [7]、Zigbee [8] 和 Wi-Fi 技术 [9], [10]。由于其低成本、广泛的室内覆盖和普遍可用性，基于 Wi-Fi 的测距是许多用例的理想解决方案，也是本文的重点。
+
+鉴于其对许多用例的吸引力，关于基于 Wi-Fi 的测距已有大量现有文献 [11]，本节稍后将进行概述。随着当前 IEEE 802.11mc [9] 和 802.11az [10] 的 Wi-Fi 标准化工作，基于往返时间 (Round-Trip-Time, RTT) 的测距是 Wi-Fi 距离估计的最流行方法。在这种方法中，发起方站点 (Initiator STA) 和响应方站点 (Responder STA) 定期执行一轮帧交换，如图 1 所示。对于第 $p$ 次帧交换，两个帧的发送时间 $(t_{p}^{(1)}, t_{p}^{(3)})$ 和接收时间 $(t_{p}^{(2)}, t_{p}^{(4)})$ 在相应的发送和接收设备上被测量。通过交换这些测量时间，可以估计 RTT，相应地估计发起方和响应方之间的绝对距离 (Absolute Range)。
+
+对于手势识别、姿态估计、速度估计、测向等多种应用 [12]，知道绝对距离可能不如跟踪差分距离 (Differential Range) 和相对距离 (Relative Range) 重要。在这里，差分距离是设备在两次相邻测量之间绝对距离的变化，而相对距离是其积分，即设备在感兴趣的时间窗口内绝对距离的变化。图 2形象地说明了绝对距离、差分距离和相对距离。考虑到这些应用，在这项工作中，我们将专注于差分距离的估计。
+
+% 预留图1的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{2cm} 图 1 占位符：RTT 测距帧交换示意图 \vspace{2cm}}}
+\caption{两个 Wi-Fi STA 之间用于基于 RTT 的距离估计的第 $p$ 次帧交换示意图。在 EDCA 精细时间测量 (FTM) 协议中，请求帧是 FTM 帧，响应帧是 ACK 帧 [10]。在基于触发和非基于触发的 FTM 协议中，请求帧是 I2R NDP 帧，响应帧是 R2I NDP 帧 [10]。这里的时钟代表两个 STA 的时间参考可能不同。}
+\label{fig:fig1}
+\end{figure}
+
+传统基于 RTT 的距离估计的一个主要限制是，上述时间测量仅利用了交换帧的基带信号 (Baseband Signal) 信息。这从根本上限制了传统的绝对/差分/相对距离估计的精度，使其受限于系统带宽 (Bandwidth, BW)，这也由基带克拉美罗下界 (Cramer-Rao lower bound) [13] 证明。使用精细时间测量 (FTM) 协议的实际测量表明，即使使用 80 MHz 的系统带宽，测距精度也仅为 1 米 [14], [15]，这可能不适合某些应用。
+
+然而，与绝对距离不同，正如本文将要展示的，差分距离信息也可以从 RTT 测距期间交换的帧的通带信号 (Passband Signal) 信息中提取。此外，这种差分距离估计从根本上不受系统带宽的限制。因此，通过利用这些（传统上未开发的）通带信息，可以获得比使用基带信息的传统估计精度高得多的差分距离估计。
+
+在这项工作中，我们提出了 WiDRa——一种新颖的基于 Wi-Fi 的差分测距解决方案，它利用通带信号信息，其精度不受系统带宽的限制。为此，WiDRa 使用来自 Wi-Fi FTM 协议内交换帧的载波相位 (Carrier Phase, CP) 测量值。这里 CP 是接收信号对应于发射机 (TX) 和接收机 (RX) 之间视距 (Line-of-Sight, LoS) 路径的相位，在载波频率处测量。直觉如下：对于 TX 的传输，RX 处接收载波相对于其本地振荡器的相位取决于 TX 和 RX 之间的传播时间（等效于距离）、载波频率以及 TX 和 RX 振荡器之间的初始相位偏移和载波频率偏移 (Carrier Frequency Offset, CFO) 等损伤。如果补偿了这些损伤，剩余部分与 TX 和 RX 之间的距离成正比，并且具有仅受载波频率限制的精度。正如将要展示的，我们提出的方法 WiDRa 可以在强 LoS 场景中以 $<1$ 厘米的精度跟踪差分距离，即使只有 20 MHz 的带宽。由于相同的帧交换产生 WiDRa 和传统基于 RTT 的距离估计，因此它们也可以结合以获得更高精度的差分、相对和绝对距离估计。
+
+% 预留图2的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{2cm} 图 2 占位符：绝对距离、差分距离和相对距离示意图 \vspace{2cm}}}
+\caption{两个 Wi-Fi STA 之间帧交换 $p \in \{1, 2, 3\}$ 的绝对距离 $A_p$、差分距离 $D_p \triangleq A_p - A_{p-1}$ 和相对距离 $R_{q,p} \triangleq A_p - A_q$ 的示意图。}
+\label{fig:fig2}
+\end{figure}
+
+就先前的工作而言，GNSS 系统已经探索了使用 CP 测量来改进距离估计，并取得了良好的成功 [16]。与 Wi-Fi 根本不同的是，GNSS 是一个同步的单向测距系统，其中使用来自多个同步卫星的测量值以及对两个或多个地面站的测量值来处理 CP 测量中的模糊性。CP 辅助测距也已扩展到其他同步系统 [17], [18]。最近，还探索了将 CP 用于改进 5G NR 的测距 [19]。然而，据我们所知，对于像 Wi-Fi 这样的非同步系统，没有关于使用基于 CP 的差分测距的现有工作。正如将要展示的，缺乏同步需要若干创新，例如将来自两个设备的 CP 测量值组合成和载波相位 (Sum-CP) 指标，以及 CFO 的估计和校正。
+
+本文的贡献如下：
+\begin{itemize}
+    \item 我们提出了 WiDRa——一种新的基于 Wi-Fi CP 的方法，用于跟踪 TX 和 RX 之间的差分距离，该方法可以重用 FTM 协议中的帧交换。
+    \item 为了验证该方法，提出了 Wi-Fi 信道状态信息 (CSI) 的详细数学模型，考虑了可能影响 CP 测量的不同系统损伤。
+    \item 我们提出了理论上合理的算法来校正这些 CSI 损伤，从校正后的 CSI 中获取 CP 测量值，并在 LoS 信道中从 CP 测量值中恢复差分距离。在此过程中，我们也确定了帧交换需要满足的必要时序条件。
+    \item 我们在模拟数据上测试了所提出的解决方案，以研究不同系统参数对 WiDRA 性能的影响。
+    \item 作为概念验证，该方法还在商用现货 Wi-Fi 硬件上进行了验证，证明了可行性，其在差分距离上实现了 $<1$ 毫米的 RMSE。
+    \item 最后，指出了当前研究的局限性并提出了未来的探索方向，以进一步挖掘 WiDRa 的潜力。
+\end{itemize}
+
+需要注意的是，本文的重点是介绍基于 CP 的差分测距思想，确定帧传输的必要条件，并（通过理论、模拟和实验）展示该方法在存在现实世界硬件损伤的情况下有效的概念验证。因此，这里我们专注于 LoS 信道。该方法在更具挑战性环境中的进一步研究将在未来的工作中探索。
+
+\subsection{Wi-Fi 测距的现有技术}
+常见的两设备间基于 Wi-Fi 的测距方法总结如下。
+\subsubsection{基于模型的测距}
+在这种方法中，TX 发送已知信号，RX 观察接收信号的参数，并使用预先确定的关于发送信号如何受距离影响的模型来推断距离。测量的参数通常是 Wi-Fi 接收信号强度指示 (RSSI) 值，模型可以是路径损耗方程 [20] 或数据驱动模型（如指纹识别 [21], [22]）。最近，还探索了使用来自一个或多个 RX 天线的 CSI（比 RSSI 提供更多信息）作为参数 [23]–[25]。由于测量的参数简单且缺乏替代方案，这在历史上是 Wi-Fi 测距最常用的方法。然而，这些方法泛化能力差，并且需要大量的开销来针对特定部署场景校准模型，因此缺乏吸引力。
+
+\subsubsection{基于到达相位差的测距}
+在这种方法中，TX 在多个频率上按顺序发送窄带正弦信号，RX 比较接收到的正弦波的相对相位以估计距离。这是用于同步窄带系统（如蓝牙 [6], [26]）测距的流行方法，这些系统自然设计用于跳频。一些工作也将其扩展到 Wi-Fi 系统，通过执行信道跳变 [27]。然而，这种方法不太适合当前的 Wi-Fi 系统，因为它们不是为执行快速信道切换而设计的，切换会中断数据传输，并且该方法没有利用 Wi-Fi 系统可用的更宽带宽。随着 Wi-Fi 7 [28] 中多链路操作 (Multi-link Operation) 的引入，在无需切换信道的情况下利用此类方法有一定空间。
+
+\subsubsection{基于往返时间 (RTT) 的测距}
+在这种方法中，TX 和 RX 完成双向帧交换，并使用前向和后向帧的发送和接收时间戳来估计 RTT，从而估计距离。由于不依赖于先验模型、训练或信道切换需求，这是目前最流行的 Wi-Fi 测距方法。相应地，已有许多先前的工作探索了这种方法 [13], [25], [29]–[31]。由 802.11mc [9] 标准化的精细时间测量 (FTM) 测距协议也是基于 RTT 测距。[32] 探索了使用 FTM 测量进行被动测距以及对 TX 和 RX 处不同时钟速度的校正。[33] 提出了使用 MUSIC 算法来处理多径问题。[14], [15] 研究了 FTM 用于定位的性能，并表明其提供约 1 米的精度。最新的 802.11az Wi-Fi 标准 [10] 正在增加对 FTM 协议的进一步安全增强，以及启用同时多设备测距和被动测距的扩展。还探索了将 RSSI、CSI 和/或 RTT 的信息相互融合以及与其他传感器的信息融合的方法，以改进距离估计 [34]–[38]。
+
+本文的组织结构如下：第二节讨论系统模型；第三节分析 CSI 的估计；第四节描述从 CSI 中分离和载波相位 (sum-CP) 的过程；第五节描述使用和载波相位测量进行差分距离估计；第六节总结了对帧传输的必要条件；第七节提供了模拟和实地数据的评估；第八节建议了未来的研究方向；最后，第九节总结了结论。
+
+**符号说明：** 标量用小写字母表示；集合用花体字母表示。此外，$j=\sqrt{-1}$，而 $|a|$, $\angle a$, $a^*$ 分别表示复数标量 $a$ 的幅度、相位角和共轭复数。此外，$\text{mod}\{a, b\}$ 是取模函数，提供除以 $b$ 后的余数，$Uni[a, b]$ 表示范围 $[a, b]$ 内的均匀分布随机变量，$\mathcal{CN}(a, b)$ 表示均值为 $a$、标准差为 $b$ 的循环对称复高斯随机变量。此外，$c \triangleq 3 \times 10^8$ m/s 是光速，$\text{Re}\{\}$ 表示复数参数的实部，$\mathbb{Z}$ 是整数集，$\mathbb{R}$ 是实数集，$\mathbb{C}$ 是复数集。
+
+\section{系统模型}
+我们考虑一个系统设置，其中有一个静止的 Wi-Fi 接入点作为 STA 1，一个移动的 Wi-Fi 站点作为 STA 2，两者均具有单天线，如图 3 所示。目标是在 STA 1 处估计 STA 2 在一段时间内的差分距离。为了启用差分距离估计，STA 1 发送一系列 $P$ 个 CP 请求帧，索引为 $\mathcal{P} = \{p \in \mathbb{Z} | 1 \le p \le P\}$。设第 $p$ 个帧的发送时间为 $t_p^{(1)}$，由 STA 1 测量。收到第 $p$ 个 CP 请求帧后，STA 2 也发送第 $p$ 个 CP 响应帧，并由 STA 1 在时间 $t_p^{(4)}$（由 STA 1 测量）接收。为了避免混淆，本文中提到的所有时间值均在 STA 1 的时间参考系中。这些 CP 帧的报头和有效载荷使用正交频分复用 (OFDM) 进行编码，跨越 $K$ 个子载波，索引为 $\mathcal{K} = \{k \in \mathbb{Z} | \lfloor \frac{-K+1}{2} \rfloor \le k \le \lfloor \frac{K-1}{2} \rfloor\}$，符号持续时间为 $T_s$，循环前缀持续时间为 $T_{cy}$。从第 $p$ 个接收到的 CP 请求帧和响应帧的长训练字段 (LTF) 中，STA 2 和 STA 1 可以分别估计每个子载波 $k$ 的 CSI 为 $\bar{h}_{p,k}^{(2)}$ 和 $\bar{h}_{p,k}^{(4)}$。使用这些 CSI 测量值，STA 可以进一步估计 CP 值 $\hat{\psi}_p^{(2)}$ 和 $\hat{\psi}_p^{(4)}$，如后文第四节-A 中定义。我们假设 $\hat{\psi}_p^{(2)}$ 的值可以由 STA 2 作为后续帧的有效载荷共享给 STA 1。此外，我们假设使用 CP 响应帧 $p$ 的训练字段和导频子载波，STA 1 还可以获得 STA 2 相对于 STA 1 的载波频率偏移 $f_{CFO,p}$ 的估计，精度为 $\pm F$ Hz [39]。
+
+% 预留图3的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{2cm} 图 3 占位符：CP 请求和响应帧交换示意图 \vspace{2cm}}}
+\caption{两个站点之间启用测距的 CP 请求和响应帧交换示意图。}
+\label{fig:fig3}
+\end{figure}
+
+为了便于分析，我们假设 STA 之间的信道是纯视距 (LoS) 信道，在第 $p$ 次帧交换时具有随时间变化的传播延迟 $\rho_p$。请注意，STA 之间的真实距离为 $A_p \triangleq c \rho_p$（其中 $c$ 是光速），差分距离为 $D_p \triangleq A_p - A_{p-1}$。本文的目标是使用 FTM 时间戳 $t_p^{(1)}, t_p^{(4)}$、CFO $f_{CFO,p}$ 和 CP 值 $\hat{\psi}_p^{(2)}, \hat{\psi}_p^{(4)}$（对于 $p \in \mathcal{P}$）在 STA 1 处找到 $\{D_p | 2 \le p \le P\}$ 的精确估计。STA 1 和 STA 2 执行的总体信令与估计步骤总结在图 4 中。
+
+% 预留图4的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{3cm} 图 4 占位符：STA 1 和 STA 2 执行的帧交换和步骤 \vspace{3cm}}}
+\caption{STA 1 和 STA 2 执行的帧交换和步骤。}
+\label{fig:fig4}
+\end{figure}
+
+\subsection{非理想因素建模}
+不失一般性，我们假设 STA 1 的晶体振荡器是准确的，而 STA 2 的晶体振荡器可能与 STA 1 的振荡器相差一个未知因子 $\eta_p$，该因子随时间缓慢变化。对于典型的 Wi-Fi 系统，我们有 $|\eta_p| \le 2 \times 10^{-5}$ [9]，并且 $\eta_p$ 的相干时间约为 1 秒。我们还假设所有关键通信操作，包括载波波形、时间戳和 STA 处的模数转换器采样时钟都是由晶体振荡器生成的，并受到相同的偏移影响 [39]。相应地，我们有以下情况：
+1) STA 2 处的载波频率为 $(1+\eta_p)f_c$，其中 $f_c$ 是 STA 1 处的载波频率。请注意，STA 1 处的 CFO 估计可以建模为：
+\begin{equation}
+\bar{f}_{CFO,p} - \eta_p f_c \sim Uni[-F, F]. \label{eq:1}
+\end{equation}
+2) STA 2 处模数转换器的采样率为 $K(1+\eta_p)/T_s$。
+3) STA 2 处 OFDM 调制/解调的符号持续时间为 $T_s/(1+\eta_p)$。
+4) STA 2 处的计时时钟比 STA 1 快 $(1+\eta_p)$ 倍。
+
+这些会导致一些相位噪声 [40], [41] 以及 STA 获得的 CSI 中的载波间干扰。商用现货 (COTS) Wi-Fi 芯片还会遭受多种额外的损伤，这些损伤会影响它们估计的 CSI，列举如下：
+
+1) **增益误差 (Gain error)**：由于自动增益控制电路的可变增益，从每个接收帧估计的 CSI 幅度可能会显著变化。这个问题已经得到了很好的研究，在 [42] 中可以找到几种好的增益误差校正方法。由于本文的重点是 CSI 的相位，这里我们隐含地忽略幅度误差，假设已经执行了此类校正。
+2) **符号定时误差 (Symbol timing error)**：符号开始时间误差主要源于检测接收帧的短训练字段 (STF) 的第一个到达副本时的误差。该误差取决于信噪比 (SNR) 和系统带宽，并且对于每个接收帧都是独立的。实验表明，这些定时误差通常小于 $20 T_s/K$ [42]。
+3) **随机相位旋转 (Random phase rotation)**：对几种 COTS Wi-Fi 芯片的实验表明，在接收帧时，STA 可能会任意地将接收数据包的相位旋转 $2\pi n/N$，其中 $N$ 是一个实现相关的参数，而 $0 \le n < N$ 是一个任意数（见图 5）。此外，每个帧的旋转可能不同。这可能是由于收发器锁相环电路中的周跳 (Cycle slips) 造成的，并且以前的工作在使用天线间相位进行到达角估计的背景下也观察到了这种行为 [43]–[45]。在这项工作中，我们假设 STA 1 和 STA 2 具有相同的 $N$ 值，并且 $N$ 是已知的。通常我们有 $N=1, 2$ 或 $4$。
+
+最后，我们假设由于上行链路和下行链路信道的前端硬件差异，从 STA 2 到 STA 1 的上行链路信道（用于 CP 响应帧）面临 $\Delta \rho$ 的额外固定传播延迟。
+
+\section{CSI 估计分析}
+给定系统模型，关于从 CP 请求和响应帧估计的 CSI，我们有以下引理。
+
+\textbf{引理 1.} 如果 STA 2 在 OFDM 解调期间的 CFO 补偿是准确的，则从第 $p$ 个 CP 请求帧在 STA 2 处估计的 CSI 可以表示为：
+\begin{equation}
+\bar{h}_{p,k}^{(2)} = e^{j2\pi \frac{k}{T_s} \tau_p^{(2)}} e^{j2\pi \frac{n_p^{(2)}}{N}} e^{-j\phi_p} e^{-j2\pi f_c(1+\eta_p)\rho_p}, \label{eq:2}
+\end{equation}
+其中 $\tau_p^{(2)}$ 是 STA 2 处的符号开始时间检测误差，$2\pi n_p^{(2)}/N$ 是 STA 2 引入的随机相位旋转，$\phi_p$ 是在时间 $t_p^{(1)}$ 时 STA 2 的载波波形相对于 STA 1 的载波波形的相位偏移。
+
+\textit{证明.} 见附录 A。 $\hfill \blacksquare$
+
+\textbf{引理 2.} 如果 STA 1 在 OFDM 解调期间的 CFO 补偿是准确的，则从第 $p$ 个 CP 响应帧在 STA 1 处估计的 CSI 可以表示为：
+\begin{equation}
+\begin{split}
+\bar{h}_{p,k}^{(4)} &= e^{j2\pi \frac{k}{T_s} \tau_p^{(4)}} e^{j2\pi \frac{n_p^{(4)}}{N}} e^{j\phi_p} e^{-j2\pi f_c(1+\eta_p)(\rho_p+\Delta\rho)} \\
+&\quad \times e^{j2\pi \eta_p f_c [t_p^{(4)} - t_p^{(1)}]},
+\end{split} \label{eq:3}
+\end{equation}
+其中 $\tau_p^{(4)}$ 是 STA 1 处的符号开始时间检测误差，$2\pi n_p^{(4)}/N$ 是 STA 1 引入的随机相位旋转，$\Delta\rho$ 是上行链路信道的额外传播延迟（见第二节-A），$\phi_p$ 如引理 1 中定义。
+
+\textit{证明.} 见附录 B。 $\hfill \blacksquare$
+
+% 预留图5的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{3cm} 图 5 占位符：随机相位旋转影响及相位斜率与 CFO 的关系 \vspace{3cm}}}
+\caption{来自涉及两个 Intel AX210 芯片的测量活动的 $\hat{\psi}_p^{(4)} - \hat{\psi}_p^{(2)} - \hat{\psi}_{p-1}^{(4)} + \hat{\psi}_{p-1}^{(2)}$ 对比 $t_p^{(4)} + t_p^{(1)} - t_{p-1}^{(4)} - t_{p-1}^{(1)}$ 的散点图，其他参数如第七节-B 所述。数据属于 $W=0.5$ s 的时间窗口，STA 2 的速度为 0.35 m/s。}
+\label{fig:fig5}
+\end{figure}
+
+直观地看，在上述任何一个引理中，我们注意到 (i) 第一项是由于符号开始误差引起的基带相位旋转，(ii) 第二项是由于特定实现原因引入的随机相位旋转，(iii) 第三项是初始 CP 偏移，(iv) 第四项是由于传播延迟引起的 CP 旋转，(v) 第五项（如果存在）是由于从帧交换开始到帧检测时间的 CFO 引起的相位旋转。
+
+\section{分离和载波相位 (Sum Carrier Phase) 分量}
+从 (2) 和 (3) 中，注意我们有兴趣分离第四项的相位，即 $2\pi f_c (1+\eta_p)\rho_p$，这是 CP 分量。为此，我们需要尽可能多地去除其他项，本节将对此进行讨论。
+
+\subsection{估计 CP 值}
+从 (2) 和 (3) 可以看出，$\bar{h}_{p,k}^{(2)}$，$\bar{h}_{p,k}^{(4)}$ 具有随 $k$ 变化的线性相位响应，其斜率由符号开始时间误差 $\tau_p^{(2)}, \tau_p^{(4)}$ 决定。因此，它们的估计值 $\hat{\tau}_p^{(2)}, \hat{\tau}_p^{(4)}$ 可以通过分别在 STA 2 和 STA 1 上对 $\bar{h}_{p,k}^{(2)}$ 和 $\bar{h}_{p,k}^{(4)}$ 运行 root-MUSIC 算法 [46] 并选取最主要的信道延迟来获得。还存在其他几种低复杂度的替代方法来估计 $\tau_p^{(2)}, \tau_p^{(4)}$，但为简洁起见此处略过。然后我们可以估计 CP 值为：
+\begin{equation}
+\hat{\psi}_p^{(\bullet)} = \angle \left[ \sum_{k \in \mathcal{K}} \bar{h}_{p,k}^{(\bullet)} e^{-j2\pi \frac{k}{T_s} \hat{\tau}_p^{(\bullet)}} \right], \label{eq:4}
+\end{equation}
+其中 $\bullet = 2, 4$ 分别代表 STA 2 和 STA 1。CP 值 $\hat{\psi}_p^{(2)}$ 随后由 STA 2 共享给 STA 1 以进行进一步处理。
+
+\subsection{优化 CFO 估计}
+如果来自第四节-A 的估计值 $\hat{\tau}_p^{(2)}$ 和 $\hat{\tau}_p^{(4)}$ 是准确的，我们可以利用 (2) 和 (3) 证明：
+\begin{align}
+\hat{\psi}_p^{(2)} &\approx \text{mod} \left\{ \frac{2\pi n_p^{(2)}}{N} - \phi_p - 2\pi f_c(1+\eta_p)\rho_p, 2\pi \right\}, \label{eq:5a} \\
+\hat{\psi}_p^{(4)} &\approx \text{mod} \left\{ \frac{2\pi n_p^{(4)}}{N} + \phi_p - 2\pi f_c(1+\eta_p)(\rho_p+\Delta\rho) \right. \nonumber \\
+&\quad \left. + 2\pi \eta_p f_c [t_p^{(4)} - t_p^{(1)}], 2\pi \right\}. \label{eq:5b}
+\end{align}
+这里我们用 $\approx$ 表示模 $2\pi$ 近似相等，并利用了 $n_p^{(2)}$ 和 $n_p^{(4)}$ 是整数的事实，且 $\eta_p f_c (\rho_p - \rho_{p-1}) \approx 0$。由于 $\phi_p$ 定义为帧交换 $p$ 开始时的 CP 偏移，进一步可知 $\phi_p = \phi_{p-1} + \pi (\eta_p + \eta_{p-1}) f_c [t_p^{(1)} - t_{p-1}^{(1)}]$。将其应用于 (5) 我们得到：
+\begin{align}
+N(\hat{\psi}_p^{(2)} - \hat{\psi}_{p-1}^{(2)}) &\approx N(\phi_{p-1} - \phi_p) - 2\pi N f_c (\rho_p - \rho_{p-1}), \label{eq:6a} \\
+N(\hat{\psi}_p^{(4)} - \hat{\psi}_{p-1}^{(4)}) &\approx N(\phi_p - \phi_{p-1}) - 2\pi N f_c (\rho_p - \rho_{p-1}) \nonumber \\
+&\quad + 2\pi N \eta_p f_c [t_p^{(4)} - t_p^{(1)} - t_{p-1}^{(4)} + t_{p-1}^{(1)}]. \label{eq:6b}
+\end{align}
+其中我们利用了 $\eta_p \approx \eta_{p-1}$ 的事实，因为晶体偏移漂移缓慢。
+\begin{equation}
+\begin{split}
+N(\hat{\psi}_p^{(4)} - \hat{\psi}_p^{(2)} - \hat{\psi}_{p-1}^{(4)} + \hat{\psi}_{p-1}^{(2)}) &\approx \\
+2\pi N f_c \eta_p [t_p^{(4)} - t_{p-1}^{(4)} &+ t_p^{(1)} - t_{p-1}^{(1)}].
+\end{split} \label{eq:7}
+\end{equation}
+显然，(7) 仅依赖于 CFO $\eta_p f_c$，而独立于其他未知量。这一分析通过图 5 中的示例实际测量数据得到了证实，我们清楚地观察到由 CFO 引起的相位斜坡。我们还观察到两个偏移 $\pi$ 弧度的斜坡，显示了随机相位旋转 ($N=2$)。虽然 $t_p^{(1)} - t_{p-1}^{(1)}$ 和 $t_p^{(4)} - t_{p-1}^{(4)}$ 可能大于 CFO 的一个周期，我们可以利用两个事实从 (7) 中找到 CFO $\hat{f}_{CFO}(p)$ 的唯一估计，即：(i) 我们有 $|\eta_p f_c - \bar{f}_{CFO,p}| \le F$，和 (ii) $\eta_p$ 在每个 $W=0.5$ s 的窗口内保持近似不变。在我们提出的方法中，在每个 $W=0.5$ s 的时间窗口内从样本 $\hat{\psi}_p^{(\bullet)}$ 估计一个单独的 CFO 值，并应用插值，如算法 1 所总结。我们还有以下备注：
+
+\textbf{备注 1.} 为了准确估计 CFO，算法 1 要求每个 $W$ 秒的时间窗口至少有 3 个样本，且帧间交换间隔 $t_p^{(1)} - t_{p-1}^{(1)} < T_{max}$。此外，对于这些样本，时间间隔 $t_p^{(4)} + t_p^{(1)} - t_{p-1}^{(4)} - t_{p-1}^{(1)}$ 必须 (i) 小于 $1/(4NF)$ 或者 (ii) 具有 $1/(4NF)$ 量级的抖动。
+
+% 算法 1 
+\begin{algorithm}
+\caption{CFO $\hat{f}_{CFO}(p)$ 的估计}
+\begin{algorithmic}[1]
+\STATE \textbf{输入:} $\hat{\psi}_p^{(2)}, \hat{\psi}_p^{(4)}, t_p^{(1)}, t_p^{(4)}, \bar{f}_{CFO,p}$ 对于 $p \in \mathcal{P}$。$W=0.5$ s。
+\STATE $T_{max}=1$ ms。$WT_{max}$ 取决于晶体稳定性，其设置使得对于任何 $q \in \mathcal{P}, |t_p^{(1)} - t_q^{(1)}| < W$，我们有 $(\eta_p - \eta_q) f_c T_{max} \ll 1$。
+\STATE $W_{max} = \lceil (t_P^{(1)} - t_1^{(1)})/W \rceil$。
+\STATE $\mathcal{\bar{Q}} = \{\}$。
+\FOR{$w=1:1:W_{max}$}
+    \STATE $t_{st} = t_1^{(1)} + (w-1)W$
+    \STATE $t_{end} = t_1^{(1)} + wW$。
+    \STATE $\mathcal{Q} = \{p \in \mathcal{P} | t_{st} \le t_p^{(1)} \le t_{end}, |t_p^{(1)} - t_{p-1}^{(1)}| < T_{max}\}$
+    \STATE $\bar{\bar{f}}_{CFO} = \sum_{p \in \mathcal{Q}} \bar{f}_{CFO,p} / |\mathcal{Q}|$。
+    \STATE 计算
+    \begin{align}
+    f_{opt} &= \text{argmax}_{|f| \le F} \text{Re} \left\{ \sum_{p \in \mathcal{Q}} e^{jN(\hat{\psi}_p^{(4)} - \hat{\psi}_p^{(2)} - \hat{\psi}_{p-1}^{(4)} + \hat{\psi}_{p-1}^{(2)})} \right. \nonumber \\
+    &\quad \left. \times e^{-j2\pi N(f+\bar{\bar{f}}_{CFO})[t_p^{(4)} + t_p^{(1)} - t_{p-1}^{(4)} - t_{p-1}^{(1)}]} \right\} \label{eq:8}
+    \end{align}
+    \STATE $\hat{f}_{CFO}(p) = f_{opt} + \bar{\bar{f}}_{CFO}$ 对于 $p \in \mathcal{Q}$。
+    \STATE $\mathcal{\bar{Q}} = \mathcal{\bar{Q}} \cup \mathcal{Q}$。
+\ENDFOR
+\FOR{$p \in \mathcal{P} \setminus \mathcal{\bar{Q}}$}
+    \STATE 通过对来自 $\mathcal{\bar{Q}}$ 的 $\hat{f}_{CFO}(\cdot)$ 值进行线性插值来设置 $f_{CFO}(p)$。
+\ENDFOR
+\STATE 返回 $\{\hat{f}_{CFO}(p) | p \in \mathcal{P}\}$。
+\end{algorithmic}
+\end{algorithm}
+
+% 预留图6的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{3cm} 图 6 占位符：$\Psi_p$ 对 $t_p^{(4)} - t_p^{(1)}$ 的散点图及残留相位噪声 \vspace{3cm}}}
+\caption{来自涉及两个 Intel AX210 芯片的测量活动的 $\Psi_p$ 对比 $t_p^{(4)} - t_p^{(1)}$ 的散点图，其他参数如第七节-B 所述。测量跨越 30 秒的时间段，STA 1 和 STA 2 均为静止。}
+\label{fig:fig6}
+\end{figure}
+
+\subsection{估计和载波相位 (Sum-CP) 分量}
+将 (5) 中的两个相位值相加，乘以 $N$ 并减去 CFO 项，我们定义和载波相位 (sum-CP) 为：
+\begin{equation}
+\begin{split}
+\Psi_p &\triangleq \text{mod} \{ N(\hat{\psi}_p^{(2)} + \hat{\psi}_p^{(4)}) \\
+&\quad - 2\pi N \hat{f}_{CFO}(p)[t_p^{(4)} - t_p^{(1)}] + \pi, 2\pi \} - \pi \\
+&\approx \text{mod} \{ -2N\pi f_c (1+\eta_p)(2\rho_p + \Delta\rho) \\
+&\quad + 2N\pi (\eta_p f_c - \hat{f}_{CFO}(p))[t_p^{(4)} - t_p^{(1)}] + \pi, 2\pi \} - \pi.
+\end{split} \label{eq:9}
+\end{equation}
+显然，所有相位损伤现在都已被移除，并且如果 CFO 估计准确，$\Psi_p$ 可以准确地跟踪距离的变化。然而，(9) 中的 CFO 移除仅对 STA 1 和 STA 2 之间的相位偏移进行了其一阶线性拟合，任何残留的相位噪声仍可能影响 $\Psi_p$。这在图 6 中得到了例证，我们在其中绘制了真实世界测量值 $\Psi_p$ 随 $t_p^{(4)} - t_p^{(1)}$ 变化的情况（对于静止的 STA 2）。显然，对于静止的 STA 2，$\Psi_p$ 的平均值随时间保持近似恒定（这是我们所期望的），但残留相位噪声导致方差随 $t_p^{(4)} - t_p^{(1)}$ 增加。相应地，我们有以下备注：
+
+\textbf{备注 2.} 为了保持 (9) 中任何残留相位噪声的影响较低，希望设计帧交换序列使得 $t_p^{(4)} - t_p^{(1)}$ 小于 1 毫秒。
+
+\section{差分和相对距离估计}
+从 (9) 中，我们看到 $\Psi_p$ 与传播延迟 $\rho_p$ 线性相关，并且由于它跟踪乘积 $2f_c \rho_p$，它可以跟踪半个波长量级的距离变化（在 5 GHz 时为 3 cm）。这比基于 RTT 的测距估计分辨率好 100 倍。然而，(9) 中 $\text{mod}\{\cdot, 2\pi\}$ 的存在在距离估计中引入了模糊性。换句话说，传播延迟 $\rho$ 和 $\rho + 1/(2N(1+\eta_p)f_c)$ 产生相同的校正后和载波相位 $\Psi_p$ 值。这有点类似于许多基于相位的测距方法中面临的整数模糊度问题 [27]。这里我们不是试图通过执行跳频来解决这个整数模糊度，而是使用和载波相位进行差分测距。请注意，如果相邻帧交换之间传播延迟 $\rho_p$ 的变化满足 $|\rho_p - \rho_{p-1}| < 1/(4N(1+\eta_p)f_c)$，从 (9) 我们可以写出：
+\begin{equation}
+\text{mod} \{ \Psi_p - \Psi_{p-1} + \pi, 2\pi \} - \pi \approx -4\pi N f_c (\rho_p - \rho_{p-1}), \label{eq:10}
+\end{equation}
+其中我们利用了 $\eta_p f_c |\rho_p - \rho_{p-1}| \ll 1$ 的事实，并且我们能够摆脱模糊性。换句话说，只要 STA 2 在相邻测量之间的移动小于载波波长的 $1/4N$，第 $p$ 次帧交换的差分距离就可以无模糊地估计为：
+\begin{equation}
+\hat{D}_p = -c \times \frac{\text{mod} \{ \Psi_p - \Psi_{p-1} + \pi, 2\pi \} - \pi}{4\pi N f_c}. \label{eq:11}
+\end{equation}
+因此，对最大 STA 2 速度有以下观察：
+
+\textbf{备注 3.} 可以使用 (11) 无模糊跟踪的最大 STA 2 速度为：
+\begin{equation}
+S_{max} = c / [4N f_c \times \max_p \{t_p^{(1)} - t_{p-1}^{(1)}\}]. \label{eq:12}
+\end{equation}
+
+注意，Wi-Fi 信道容易被其他设备占用，这可能导致某些异常点 $p$ 的 $t_p^{(1)} - t_{p-1}^{(1)}$ 变大，并在 (11) 中导致丢失 $1/2N$ 个波长周期。我们将此效应称为周跳 (Cycle slips)。通过利用 STA 2 速度的时间相关性，可以实现对这种异常点鲁棒的估计，估计距离为：
+\begin{equation}
+\hat{D}_p = -c \times \frac{\text{mod} \{ \Psi_p - \Psi_{p-1} + \Theta_p + \pi, 2\pi \} - \Theta_p - \pi}{4\pi N f_c}, \label{eq:13}
+\end{equation}
+其中
+\begin{align*}
+\Theta_p &= \sum_{q \in \mathcal{Q}_p} 4\pi N f_c \hat{S}_p (t_p^{(1)} - t_q^{(1)})/c, \\
+\hat{S}_p &= \text{argmax}_{|s| \le S_{max}} \left| \sum_{q \in \mathcal{Q}_p} e^{j(\Psi_q - \Psi_p + \frac{4\pi N f_c}{c}(t_q^{(1)} - t_p^{(1)})s)} \right|, \\
+\mathcal{Q}_p &= \{q \in \mathcal{P} | |t_q^{(1)} - t_p^{(1)}| \le 0.25\}, \\
+S_{max} &= c / [4N f_c \times \text{percentile}_{80} \{t_p - t_{p-1} | p \in \mathcal{P}\}].
+\end{align*}
+(11) 和 (13) 都是不使用时间平滑的一次性估计。虽然超出了本文的范围，但可以应用适当的差分距离状态空间模型，通过卡尔曼滤波 (Kalman filtering) 进一步提高性能 [47]。
+差分距离估计可以进一步积分以获得相对距离估计：
+\begin{equation}
+\hat{R}_{q,p} \triangleq \sum_{a=q+1}^{p} \hat{D}_a, \label{eq:14}
+\end{equation}
+它测量了时间戳 $t_q^{(1)}$ 和 $t_p^{(1)} (p > q)$ 之间距离的变化。随着用户速度接近 $S_{max}$，我们可能会经历周跳，导致 $\hat{R}_{q,p}$ 在大 $t_p^{(1)} - t_q^{(1)}$ 时出现累积误差。这种影响将在第七节-A 中稍后研究。
+
+\section{传输时间的限制}
+基于上述分析，我们对 CP 请求/响应帧的传输时间有以下建议：
+1) 为了保持较低的帧交换开销，中位帧间交换间隔 $t_p^{(1)} - t_{p-1}^{(1)}$ 应 $\ge 25$ ms。
+2) 对于 CFO 估计（见备注 1），我们建议每 $W$ 秒增加一些额外的帧交换，其帧间交换间隔 $t_p^{(1)} - t_{p-1}^{(1)}$ 很小 $\approx 300 \mu s$，且抖动为 $1/(4NF)$。这种嵌套结构如图 7 所示。
+3) 基于备注 2，我们建议在 STA 2 处 CP 请求帧接收结束与 CP 响应帧传输时间之间仅使用短帧间间隔 (Short Inter-Frame Spacing, $16 \mu s$)。
+
+% 预留图7的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{2cm} 图 7 占位符：抖动嵌套阵列结构示意图 \vspace{2cm}}}
+\caption{帧交换传输时间 $\{t_p^{(1)} | p \in \mathcal{P}\}$ 的抖动嵌套阵列结构示意图，外部阵列间距为 25 ms，内部阵列间距约为 $300 \mu s$。}
+\label{fig:fig7}
+\end{figure}
+
+\section{评估结果}
+为了评估不同系统参数的影响，我们首先使用模拟 CSI 数据。稍后，我们还将在真实世界 CSI 数据上验证所提出的方法，以展示概念证明。作为比较基准，我们使用差分距离估计 $\hat{D}_p^{FTM} = \hat{A}_p^{FTM} - \hat{A}_{p-1}^{FTM}$，其中 $\hat{A}_p^{FTM}$ 是来自使用时间测量和基带信息的 FTM 过程的传统绝对距离估计。这里 $\hat{A}_p^{FTM}$ 给出为：
+\begin{equation}
+\hat{A}_p^{FTM} = \frac{c}{2} \left( t_p^{(4)} - \hat{\tau}_p^{(4)} - t_p^{(1)} - \frac{t_p^{(3)} - t_p^{(2)} + \hat{\tau}_p^{(2)}}{1 + \hat{f}_{CFO,p}/f_c} \right) \label{eq:15}
+\end{equation}
+其中 $t_p^{(2)}, t_p^{(3)}$ 是 STA 2 测量的 CP 请求帧接收时间和 CP 响应帧发送时间（见图 1），$\hat{\tau}_p^{(2)}, \hat{\tau}_p^{(4)}$ 是来自第四节-A 的估计值。对于 WiDRa 和 FTM，我们都使用信号维度设置为 3 的 root-MUSIC 来估计 $\hat{\tau}_p^{(2)}, \hat{\tau}_p^{(4)}$。请注意，(15) 包含了最先进的 FTM 对符号开始时间和不同时钟速度的校正 [32], [33]。虽然这里我们将 WiDRa 与 FTM 进行比较，但应强调的是，基于 CP 的方法使用通带信息，而基于 FTM 的测距使用来自相同帧交换的基带信息。因此，它们是互补的，可以结合起来提高整体距离估计，如第八节所述。
+
+\subsection{模拟数据}
+为了进行模拟，我们考虑一个尺寸为 $5 \times 5$ m 的二维房间，STA 1 位于其中心，模拟时间为 30 秒。在每个随机历元中，STA 2 使用随机路点模型 (Random waypoint model) [48] 以均匀速度 $S$ m/s 移动，如图 8 所示。STA 1 和 STA 2 在 $f_c = 5.2$ GHz（5 GHz ISM 频段的信道 40）上使用 802.11ax 协议 [49] 在 20 MHz 信道上运行。传输通过 OFDM 调制进行，符号持续时间 $T_s = 12.8 \mu s$，循环前缀持续时间 $T_{cy} = 3.2 \mu s$，有 $K=256$ 个子载波。为了启用差分测距，STA 1 发送 $P=1440$ 个 CP 请求帧，传输时间使用抖动嵌套阵列结构：
+\begin{equation*}
+t_p^{(1)} = 0.5 \lfloor (p-1)/24 \rfloor + 0.025 (\text{mod}\{p-1, 24\} - 4),
+\end{equation*}
+对于 $\text{mod}\{p-1, 24\} \ge 5$，以及
+\begin{equation*}
+t_p^{(1)} = 0.5 \lfloor (p-1)/24 \rfloor + 0.0003 \text{mod}\{p-1, 24\} + \chi_p,
+\end{equation*}
+对于 $\text{mod}\{p-1, 24\} \le 4$，其中 $\chi_p \sim Uni[-100, 100] \mu s$。请注意，这平均每 20ms 生成一次帧交换。假设 CP 请求和响应帧的传输持续时间各为 $100 \mu s$，STA 2 在收到请求帧后 16 $\mu s$ 发送 CP 响应帧。
+
+% 预留图8的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{3cm} 图 8 占位符：模拟布局示意图 \vspace{3cm}}}
+\caption{模拟布局示意图。}
+\label{fig:fig8}
+\end{figure}
+
+为了生成信道，我们考虑光线追踪的简单抽象，其中信道有 5 条路径，即 LoS 路径和从房间 4 面墙壁反射的各一条路径，如图 8 所示。假设从 STA 1 到 STA 2 的信道具有 $\kappa$ 的莱斯因子，并写为：
+\begin{equation}
+h_p(t) = \sqrt{\kappa} \frac{\delta(t-\rho_p)}{\sqrt{\kappa+1}} + \sum_{l=1}^{4} \frac{\delta(t-\tilde{\rho}_{p,l})}{\sqrt{4(\kappa+1)}}, \label{eq:16}
+\end{equation}
+其中 $\tilde{\rho}_{p,l}$ 是从第 $l$ 面墙反射的路径的传播延迟。请注意，这些路径无法用 20 MHz 带宽分辨，并且确实会对 (4) 中的相位估计造成干扰。对于从 STA 2 到 STA 1 的信道，为了模拟上行链路-下行链路的不对称性，我们考虑 $\Delta\rho = 1$ ns 的额外路径长度。
+
+STA 1 处的晶体振荡器被建模为完美的，而 STA 2 处的晶体振荡器被建模为具有正弦偏移，由下式给出：
+$\eta_p = [0.5 + 0.1 \sin(0.05\pi t_p^{(1)} + \varphi)] \times 10^{-5}$,
+其中 $\varphi \sim Uni[0, 2\pi)$ 在每个历元中。然后使用此 $\eta_p$ 确定 STA 2 处的载波频率、采样时间和符号持续时间的值。OFDM 调制和解调在 STA 1 和 STA 2 处按 (17), (19), (22) 和 (23) 执行。我们假设保守的接收机 CFO 估计精度为 $F=5$ KHz。根据我们之前使用 COTS 硬件的实验 [42]，符号开始时间误差建模为 $\tau_p^{(2)}, \tau_p^{(4)} \sim Uni[-300, -100]$ ns。我们还假设 STA 具有 $N=2$ 的任意相位旋转。为方便起见，我们不模拟 CSI 增益误差，但假设测量的 CSI 遭受加性高斯噪声。最后，为了有利于 FTM，我们假设测量的时间戳具有 0.01 ns 的良好精度。
+
+在这些设置下，不同系统参数对 WiDRa 差分测距 RMSE 的影响如图 9 所示。图 9a 研究了 SNR 对性能的影响，可以看出，所提出的方法对信道噪声具有鲁棒性，即使在 10 dB 的低 SNR 下也能表现良好。图 9b 研究了 STA 2 速度对性能的影响，我们观察到在 $0.25$ m/s 处性能急剧下降，但在此速度以下 RMSE 很低。这与第五节中的分析非常吻合，因为对于所选的模拟参数，根据 (12) 有 $S_{max}=0.28$ m/s。尽管本文的分析集中在单径信道上，但在图 9c 中，我们通过改变莱斯因子研究了信道多径对性能的影响。结果表明，即使存在多径，如果信道莱斯因子 $\kappa \ge 7$，WiDRa 也能表现良好。总体而言，我们也观察到平均而言，WiDRa 的差分测距 RMSE 比基准一次性 FTM 过程（使用 RTT）低 100 倍。
+
+% 预留图9的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{5cm} 图 9 占位符：不同模拟参数下的 RMSE \vspace{5cm}}}
+\caption{不同模拟参数下基于和载波相位的差分距离估计的 RMSE。(a) 描绘了 SNR 的影响，其中 $\kappa=1000, S=0.1$ m/s。(b) 描绘了速度 $S$ 的影响，其中 $SNR=30$ dB, $\kappa=1000$。(c) 描绘了莱斯因子的影响，其中 $SNR=30$ dB, $S=0.1$ m/s。}
+\label{fig:fig9}
+\end{figure}
+
+接下来，我们在图 10 中研究 WiDRa 对间隔 $t_p^{(1)} - t_q^{(1)} = T$ 的样本的相对距离估计 $\hat{R}_{q,p}$。图 10a 研究了相对距离估计 RMSE 随 $T$ 的变化，表明相对距离估计在 $\kappa=7$ 时在 20 秒内仅导致小于 1 厘米的缓慢误差累积。我们还观察到误差累积随 $T$ 呈线性关系（超过 $T=1s$），这表明唯一的误差源是周跳。换句话说，非视距路径导致差分距离估计中的局部误差，这些误差不会随时间累积。这在图 10b 中得到了进一步证实，我们在其中绘制了相对距离误差 $(\hat{R}_{q,p} - R_{q,p})$（模 $c/2Nf_c$）的概率密度函数 (PDF) 作为时间间隔 $T = t_p^{(1)} - t_q^{(1)}$ 的函数，对于使用 (11) 的 WiDRa。这里 PDF 在 $T=1$ s 后收敛，表明超过该点后，由非视距路径引起的累积误差方差不会增加。由于可以通过 (13) 和减小 $t_p^{(1)} - t_{p-1}^{(1)}$ 来减少周跳，这对于所提出方法在相对距离估计中的实用性是一个令人鼓舞的结果。然而，对于具有漫反射和非平稳多径分布的信道，可能需要进一步研究。
+
+% 预留图10的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{4cm} 图 10 占位符：相对距离估计误差统计 \vspace{4cm}}}
+\caption{基于和载波相位的相对距离估计误差的统计数据，作为时间间隔 $T$ 的函数，条件为 $SNR=\infty, S=0.1$ m/s 和 $\kappa=7$。(a) 描绘了误差的 RMSE。(b) 描绘了使用 (11) 的 WiDRa 的误差 PDF（模 $c/2Nf_c$）。使用 (13) 的 PDF 类似。}
+\label{fig:fig10}
+\end{figure}
+
+最后，我们在表 I 中总结了 WiDRa 不同步骤的平均计算时间，并将其与 FTM (15) 的计算时间进行了比较。显然，计算时间主要由第四节-A 中的 root-MUSIC 算法主导。因此，使用 root-MUSIC 的低复杂度替代方案可以进一步减少计算时间。
+
+\begin{table}[htbp]
+\caption{每次帧交换的计算时间 (ms)}
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+方法 & 平均时间 ($\mu s$) & 计算复杂度 \\
+\hline
+估计 $\hat{\tau}_p^{(2)}, \hat{\tau}_p^{(4)}$ (Section IV-A) & 950 & $O(K^3)$ \\
+\hline
+CFO 细化 (Section IV-B) & 7 & $O(F)$ \\
+\hline
+WiDRa 使用 (11) & 957 & $O(2K^3) + O(F)$ \\
+\hline
+WiDRa 使用 (13) & 1000 & $O(2K^3) + O(F)$ \\
+ & & $+ O(S_{max}|\mathcal{Q}_p|)$ \\
+\hline
+FTM 来自 (15) & 950 & $O(2K^3)$ \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:table1}
+\end{table}
+
+\subsection{实地数据}
+为了展示 WiDRa 确实有效的概念验证，我们还在一些实地数据集上描述了其性能。为此，我们建立了一个涉及连接到中央处理单元 (CPU) 的两个 Intel AX210 设备的测试床。在实验期间，STA 1 是静止的，STA 2 设置在 (a) 可编程滑块或 (b) 相对于 STA 1 移动的小车上，如图 11a 和 11b 所示。对于滑块，STA 之间的平均距离设置为 0.8 米，对于小车设置，平均距离设置为 3 米。尽管这确保证了强视距路径，但测量是在典型的办公室工作空间中进行的，其中有许多金属门、架子、桌子和椅子作为散射体并产生多径，如图 11 的布局所示。我们进行了 6 次实验，每次运行 $>60$ 秒，大致分为两类：
+1) **慢速移动**：在实验 1-2 中，STA 2 设置在滑块上，并相对于 STA 1 径向往返移动，速度 $<50$ mm/s。
+2) **快速移动**：在实验 3-6 中，STA 2 设置在小车上，并以 $>50$ mm/s 的速度径向远离 STA 1 移动。
+
+为了执行帧交换并获取相应的时间戳和 CSI，我们在 Initiator-Responder 模式下使用 PicoScenes 软件 [50]。我们仅使用每个 STA 上的 2 个天线之一进行帧的发送/接收。时间戳和 CSI $\{t_p^{(1)}, t_p^{(4)}, \bar{h}_{p,k}^{(4)} | p \in \mathcal{P}, k \in \mathcal{K}\}$ 在 STA 1 处记录，$\{t_p^{(2)}, t_p^{(3)}, \bar{h}_{p,k}^{(2)} | p \in \mathcal{P}, k \in \mathcal{K}\}$ 在 STA 2 处记录在 CPU 上，并在后处理中测试所提出的算法。如图 5 所示，Intel AX210 芯片遭受 $N=2$ 的任意相位旋转。
+
+% 预留图11的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{5cm} 图 11 占位符：实地数据测量设置 \vspace{5cm}}}
+\caption{实地数据的 STA 1 和 STA 2 测量设置，包含 (a) 基于滑块的移动和 (b) 基于小车的移动。(c) 描绘了帧交换的下采样以近似嵌套阵列模式。}
+\label{fig:fig11}
+\end{figure}
+
+需要注意的是，PicoScenes 有几个局限性：
+\begin{itemize}
+    \item 它不允许很好地控制帧传输时间，因此无法复制图 7 中的模式。作为解决方法，我们以 $t_p^{(1)} - t_{p-1}^{(1)} \approx 1$ ms 的最快允许速率执行帧交换，然后将数据下采样到所需的 25 ms 间隔。为了允许精细 CFO 估计（第四节-B），我们不对每个 $W=0.5$ s 窗口的前 20 个样本进行欠采样。这种欠采样过程如图 11c 所示。然而需要注意的是，两个设备之间的平均 CFO 约为 4-8 KHz，在这个 1 ms 间隔下仍然严重欠采样，使得 CFO 细化具有挑战性。
+    \item 它允许的最短往返时间为 $t_p^{(4)} - t_p^{(1)} \approx 0.5$ ms，这会导致大量残留相位噪声影响估计并可能导致周跳（见图 6）。
+    \item 它偶尔会经历 $>100$ ms 的无传输间隔，这使得跟踪相对距离变得更加困难并可能导致周跳。
+    \item 它仅提供 25 ns 精度及其传输时间戳。因此，我们跳过与需要更高精度的 FTM (15) 的比较。
+\end{itemize}
+因此，下面给出的结果是受限的，并且可以通过更先进的工具进一步改进。
+
+对于每个实验，(i) 差分距离 $\hat{D}_p$ 和 (ii) 特定时间间隔 $t_p^{(1)} - t_q^{(1)} = T$ 的相对距离 $\hat{R}_{q,p}$（从 (13) 获得）的 RMSE 如表 II 所示。
+
+\begin{table}[htbp]
+\caption{使用 (13) 的差分和相对距离的 RMSE}
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+Exp. & $f_c$ & BW & Speed & $\hat{D}_p$ & \multicolumn{3}{c|}{$\{\hat{R}_{q,p}|t_p^{(1)}-t_q^{(1)}=T\}$ RMSE [mm]} \\
+No. & MHz & MHz & $mm/s$ & RMSE [mm] & $T=50ms$ & $T=1s$ & $T=5s$ \\
+\hline
+1 & 5260 & 20 & 5 & 0.2 & 0.2 & 0.9 & 0.7 \\
+2 & 5260 & 20 & 30 & 0.3 & 2.4 & 0.4 & 4.2 \\
+3 & 5985 & 80 & 55 & 0.6 & 16.5 & 48.4 & 1.3 \\
+4 & 5985 & 80 & 100 & 0.7 & 20.3 & 53.1 & 1.6 \\
+5 & 6015 & 20 & 140 & 1 & 1.9 & 22 & 43.8 \\
+6 & 6015 & 20 & 350 & 2.2 & 80.2 & 269.4 & 5 \\
+\hline
+\end{tabular}
+\end{center}
+\label{tab:table2}
+\end{table}
+
+从备注 3 中注意，对于 25 ms 采样，使用 (13) 的最大可分辨速度约为 250 mm/s。我们观察到 STA 2 的速度越接近此限制，周跳的机会就越高，相应地 RMSE 也就越高。在非常低的速度下，我们观察到即使在 5 秒的间隔后，相对距离估计的累积误差也低于 1 厘米。这在图 12 中也很明显，我们在其中绘制了两个示例实验中由 (11) 和 (13) 预测的相对距离 $\hat{R}_{1,p}$ 轨迹。因此，结果确凿地证明了通过跟踪 LoS 信道中的载波相位，确实可以在 Wi-Fi 系统中实现毫米级精度的差分和相对距离估计。
+
+% 预留图12的位置
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox{0.9\linewidth}{\centering \vspace{4cm} 图 12 占位符：相对距离估计与基准真值的对比 \vspace{4cm}}}
+\caption{从 (14) 估计的相对距离与基准真值的对比图。(a) 实验 2（滑块设置）。(b) 实验 5（小车设置）。}
+\label{fig:fig12}
+\end{figure}
+
+\section{局限性与未来方向}
+尽管本文介绍了利用 CP 进行 Wi-Fi 差分测距的潜力并提供了一些概念验证结果，但必须强调还有大量主题有待研究。这里我们重点介绍其中几个，以帮助激发这些方向的研究。
+
+1) **处理多径信道**：本文的分析假设了理想的 LoS 信道。虽然仿真结果在多径下显示出良好的性能，但对于小莱斯因子 ($\kappa$) 的信道，仍需进一步的工作和评估。特别是，在非视距 (Non-LoS) 信道中使用该方法具有挑战性，其中直接路径显著衰减导致 $\kappa$ 值很小。一个简单的解决方案是在 $\kappa$ 大时机会性地使用 WiDRa，并在 $\kappa$ 小时更多地依赖基于 RTT 的距离估计。当 STA 有多个天线和更宽的传输带宽可用时，还可以研究利用 CSI 中的空间和频率维度，在第四节-A 中估计 $\hat{\tau}_p^{(\bullet)}$ 时更好地区分 LoS 路径和其他路径。这可以减少其他路径对 (4) 的影响，即使在 $\kappa$ 很小时也能提高性能。
+
+2) **处理周跳**：使用 CP 进行相对距离估计的一个担忧是周跳的存在，它可能导致随时间的累积误差。可能需要进一步的工作来降低周跳的概率，例如使用基于 FTM 的绝对距离信息、亚奈奎斯特采样方法 [51] 或来自多个天线或链路（在 Wi-Fi 7 中）的 CSI。
+
+3) **帧交换开销和共存**：为了能够无模糊地跟踪 1 m/s 的最大 STA 2 速度，在 5 GHz 下所需的平均帧交换间隔为 15 ms（对于 $N=1$），这导致了非常大的通信开销。Wi-Fi 中的信道争用可能导致相邻帧之间的信道接入延迟显著，这也是另一个限制因素，可能降低最大跟踪速度。减少所需通信开销并处理信道接入延迟的机制是未来研究的一个好方向。
+
+4) **被动 CP 测距**：在 IEEE 802.11az 标准 [10] 中，引入了被动测距 (Passive Ranging) 协议，其中 STA 2 不主动参与帧交换，而是被动监听锚点 STA 之间的帧交换来定位自己。这种方法随着设备数量的增加具有良好的扩展性。另一个很好的研究方向是将所提出的方法扩展到被动测距。
+
+5) **改进绝对距离估计**：虽然本文的重点是获得差分距离，但差分距离估计也可用于改进从例如 FTM 协议获得的绝对距离估计。这是因为知道差分距离可以对其相邻绝对距离估计进行智能平滑。可以利用关于传感器融合 [52] 的丰富文献进一步研究这一点，将基于 CP 的差分距离与基于 RTT 的绝对距离相结合。
+
+6) **测向和三角测量**：从 (10) 中注意，在具有准确 CFO 估计的情况下，相位和差 $\Psi_p - \Psi_{p-a}$ 可以解释为频率为 $2f_c$ 的载波在分别位于时间 $t_p^{(1)}$ 和 $t_{p-a}^{(1)}$ 的 STA 2 真实位置的两个天线处接收时的相对相位变化。换句话说，所提出的和载波相位方法使得在 STA 2 移动时能够对其进行相干相位测量，从而生成虚拟天线阵列。因此，和载波相位测量有可能实现单天线 STA 的测向和基于三角测量的定位 [53], [54]，这值得研究。
+
+\section{结论}
+本文首次探索了在 Wi-Fi 等非同步系统中使用载波相位在两个设备之间执行差分测距的想法。正如分析所示，测距精度仅受载波频率限制，而不受带宽限制。可以跟踪距离的适当指标是和载波相位 (sum-CP)，即在补偿符号开始时间误差和 CFO 后，在两个设备处以载波频率测量的 CSI 相位之和。结果表明，每 0.5 秒对 CFO 进行分段拟合提供了足够的分辨率以从和载波相位中去除 CFO。分析还建议对 CP 请求和响应帧使用嵌套阵列传输结构，以实现 CFO 和差分距离的同时估计。我们还得出结论，对于给定的帧交换速率，可以准确跟踪的最大设备速度是有界的，超过该速度就会观察到周跳。仿真结果表明，在 25 ms 的帧交换间隔下，基于和载波相位的差分距离可以比基于 RTT 的差分距离性能优越 100 倍，甚至在莱斯因子 $\kappa \ge 7$ 的多径信道中也能表现良好。真实世界的实验验证了理论分析，并提供了确凿的证据，表明载波相位确实可以提供毫米级的差分测距和相对测距能力。分析还强调了该方法的局限性，如周跳、适应更快的设备速度和高多径信道等，并提出了一些处理这些问题的建议。
+
+\appendices
+\section{引理 1 的证明}
+STA 1 发送的第 $p$ 个 CP 请求帧的第 $m$ 个符号的发射信号可以写为
+\begin{equation}
+s(t) = \sum_{k \in \mathcal{K}} x_k e^{j2\pi k \frac{t - t_p^{(1)} - m(T_s + T_{cy})}{T_s}} e^{j2\pi f_c t}, \label{eq:17}
+\end{equation}
+对于 $-T_{cy} \le t - t_p^{(1)} - m(T_s + T_{cy}) < T_s$，其中 $x_k$ 是符号 $m$ 第 $k$ 个子载波上的导频数据。设 STA 2 检测第 $p$ 个 CP 请求帧的符号开始时间的误差为 $\tau_p^{(2)}$。那么 STA 2 感知到的第 $m$ 个 OFDM 符号的接收时间（在 STA 1 的时间参考中测量）为
+\begin{equation}
+\bar{T} = t_p^{(1)} + \rho_p + \tau_p^{(2)} + m(T_s + T_{cy})(1 + \eta_p). \label{eq:18}
+\end{equation}
+假设 STA 2 从该帧的第 $m$ 个 OFDM 符号估计 CSI。该符号在子载波 $k$ 上的 OFDM 解调输出可以表示为
+\begin{align}
+Y_k &= \int_{t=\bar{T}}^{\bar{T} + \frac{T_s}{1+\eta_p}} \frac{1}{T_s} s(t - \rho_p) e^{-j2\pi f_c(1+\eta_p)t} e^{j2\pi f_c \eta_p t_p^{(1)}} \nonumber \\
+&\quad \times e^{-j\phi_p} e^{j2\pi \hat{f}_{CFO}(t - t_p^{(1)} - \rho_p - \tau_p^{(2)})} \nonumber \\
+&\quad \times e^{-j2\pi k \frac{(1+\eta_p)(t-\bar{T})}{T_s}} dt, \label{eq:19}
+\end{align}
+其中 $\hat{f}_{CFO}$ 是 STA 2 从接收帧估计的 CFO [39]。假设 STA 2 可以准确估计 CFO 值，即 $\hat{f}_{CFO} = \eta_p f_c$，(19) 可以进一步简化为
+\begin{align}
+Y_k &\approx \int_{t=\bar{T}}^{\bar{T} + \frac{T_s}{1+\eta_p}} \frac{1}{T_s} s(t - \rho_p) e^{-j2\pi f_c t} e^{-j2\pi \eta_p f_c(\rho_p + \tau_p^{(2)})} \nonumber \\
+&\quad \times e^{-j\phi_p} e^{-j2\pi k \frac{(1+\eta_p)(t-\bar{T})}{T_s}} dt \nonumber \\
+&= \int_{t=\bar{T}}^{\bar{T} + \frac{T_s}{1+\eta_p}} \sum_{\bar{k} \in \mathcal{K}} \frac{x_{\bar{k}}}{T_s} e^{j2\pi \bar{k} \frac{t - t_p^{(1)} - \rho_p - m(T_s + T_{cy})}{T_s}} e^{-j\phi_p} \nonumber \\
+&\quad \times e^{-j2\pi f_c [(1+\eta_p)\rho_p + \eta_p \tau_p^{(2)}]} e^{-j2\pi k \frac{(1+\eta_p)(t-\bar{T})}{T_s}} dt, \label{eq:20}
+\end{align}
+其中我们使用了 (17)。利用 $|\eta_p m K| \ll 1$ 和 $|\eta_p f_c \tau_p^{(2)}| \ll 1$ 在典型场景下的事实，(20) 可以进一步简化为
+\begin{align}
+Y_k &\approx \int_{t=\bar{T}}^{\bar{T} + T_s} \sum_{\bar{k} \in \mathcal{K}} \frac{x_{\bar{k}}}{T_s} e^{j2\pi \bar{k} \frac{t + \tau_p^{(2)} - \bar{T}}{T_s}} e^{-j2\pi k \frac{t - \bar{T}}{T_s}} \nonumber \\
+&\quad \times e^{-j2\pi f_c(1+\eta_p)\rho_p} e^{-j\phi_p} dt \nonumber \\
+&= x_k e^{j2\pi k \frac{\tau_p^{(2)}}{T_s}} e^{-j2\pi f_c(1+\eta_p)\rho_p} e^{-j\phi_p}. \label{eq:21}
+\end{align}
+将右侧除以 $x_k$，结果得证。
+
+\section{引理 2 的证明}
+设 STA 1 检测第 $p$ 个 CP 响应帧的符号开始时间的误差为 $\tau_p^{(4)}$。那么第 $p$ 个 CP 响应帧的真实传输时间（在 STA 1 的时间参考中测量）为 $t_p^{(4)} - \rho_p - \Delta\rho - \tau_p^{(4)}$。则 STA 2 发送的第 $p$ 个 CP 响应帧的第 $m$ 个符号的发射信号可以写为
+\begin{align}
+s(t) &= \sum_{k \in \mathcal{K}} x_k e^{j2\pi (1+\eta_p) k \frac{t - t_p^{(4)} + \rho_p + \Delta\rho + \tau_p^{(4)} - m(T_s + T_{cy})(1+\eta_p)}{(1+\eta_p)T_s}} \nonumber \\
+&\quad \times e^{j2\pi f_c(1+\eta_p)t} e^{-j2\pi f_c \eta_p t_p^{(1)}} e^{j\phi_p}, \label{eq:22}
+\end{align}
+对于 $-T_{cy} \le \frac{t - t_p^{(4)} + \rho_p + \Delta\rho + \tau_p^{(4)} - m(T_s + T_{cy})(1+\eta_p)}{1+\eta_p} < T_s$。假设 STA 1 从该帧的第 $m$ 个 OFDM 符号估计 CSI。请注意，STA 1 感知到的第 $m$ 个 OFDM 符号的接收时间为 $\bar{T} = t_p^{(4)} + m(T_s + T_{cy})$。该符号在子载波 $k$ 上的 OFDM 解调输出可以表示为
+\begin{align}
+Y_k &= \int_{t=\bar{T}}^{\bar{T} + T_s} \frac{1}{T_s} s(t - \rho_p - \Delta\rho) e^{-j2\pi f_c t} \nonumber \\
+&\quad \times e^{j2\pi \hat{f}_{CFO}(t - t_p^{(4)})} e^{-j2\pi k \frac{t - \bar{T}}{T_s}} dt, \label{eq:23}
+\end{align}
+其中 $\hat{f}_{CFO}$ 是 STA 1 从接收帧估计的 CFO。假设 STA 1 可以准确估计 CFO 值，即 $\hat{f}_{CFO} = -\eta_p f_c$，(23) 可以进一步简化为
+\begin{align}
+Y_k &= \int_{t=\bar{T}}^{\bar{T} + T_s} \sum_{\bar{k} \in \mathcal{K}} \frac{x_{\bar{k}}}{T_s} e^{j2\pi (1+\eta_p) \bar{k} \frac{t - t_p^{(4)} + \tau_p^{(4)} - m(T_s + T_{cy})}{1+\eta_p}} \nonumber \\
+&\quad \times e^{-j2\pi f_c(1+\eta_p)(\rho_p + \Delta\rho)} e^{-j2\pi \eta_p f_c t_p^{(1)}} \nonumber \\
+&\quad \times e^{j\phi_p} e^{j2\pi \eta_p f_c t_p^{(4)}} e^{-j2\pi k \frac{t - \bar{T}}{T_s}} dt, \label{eq:24}
+\end{align}
+其中我们使用了 (22)。利用 $|\eta_p m K| \ll 1$，(24) 可以进一步简化为
+\begin{align}
+Y_k &\approx \int_{t=\bar{T}}^{\bar{T} + T_s} \sum_{\bar{k} \in \mathcal{K}} \frac{x_{\bar{k}}}{T_s} e^{j2\pi \bar{k} \frac{t - \bar{T} + \tau_p^{(4)}}{T_s}} e^{j2\pi \eta_p f_c [t_p^{(4)} - t_p^{(1)}]} \nonumber \\
+&\quad \times e^{-j2\pi f_c(1+\eta_p)(\rho_p + \Delta\rho)} e^{j\phi_p} \nonumber \\
+&\quad \times e^{-j2\pi k \frac{t - \bar{T}}{T_s}} dt \nonumber \\
+&= x_k e^{j2\pi k \frac{\tau_p^{(4)}}{T_s}} e^{j2\pi \eta_p f_c [t_p^{(4)} - t_p^{(1)}]} \nonumber \\
+&\quad \times e^{-j2\pi f_c(1+\eta_p)(\rho_p + \Delta\rho)} e^{j\phi_p}. \label{eq:25}
+\end{align}
+将右侧除以 $x_k$，结果得证。
+
+\begin{thebibliography}{00}
+
+\bibitem{b1} F. Zafari, A. Gkelias, and K. K. Leung, “A survey of indoor localization systems and technologies,” IEEE Communications Surveys \& Tutorials, vol. 21, no. 3, pp. 2568–2599, Apr. 2019.
+\bibitem{b2} “IEEE standard for low-rate wireless networks–amendment 1: Enhanced ultra wideband (UWB) physical layers (PHYs) and associated ranging techniques,” IEEE Std 802.15.4z-2020 (Amendment to IEEE Std 802.15.4-2020), pp. 1–174, Aug. 2020.
+\bibitem{b3} S. Royo and M. Ballesta-Garcia, “An overview of Lidar imaging systems for autonomous vehicles,” Applied Sciences, vol. 9, no. 19, Sep. 2019.
+\bibitem{b4} P. Misra and P. Enge, Global Positioning System: Signals, Measurements, and Performance (Revised Second Edition). Ganga-Jamuna Press, Dec. 2010.
+\bibitem{b5} A. Gabbrielli, J. Bordoy, W. Xiong, G. K. J. Fischer, T. Schaechtle, J. Wendeberg, F. H\"oflinger, C. Schindelhauer, and S. J. Rupitsch, “RAILS: 3-D real-time angle of arrival ultrasonic indoor localization system,” IEEE Transactions on Instrumentation and Measurement, vol. 72, pp. 1–15, Nov. 2022.
+\bibitem{b6} P. Zand, J. Romme, J. Govers, F. Pasveer, and G. Dolmans, “A high-accuracy phase-based ranging solution with bluetooth low energy (BLE),” in IEEE Wireless Communications and Networking Conference (WCNC), Apr. 2019, pp. 1–8.
+\bibitem{b7} G. Pau, F. Arena, Y. E. Gebremariam, and I. You, “Bluetooth 5.1: An analysis of direction finding capability for high-precision location services,” Sensors, vol. 21, no. 11, May 2021.
+\bibitem{b8} “IEEE standard for low-rate wireless networks,” IEEE Std 802.15.4-2020 (Revision of IEEE Std 802.15.4-2015), pp. 1–800, July 2020.
+\bibitem{b9} “IEEE standard for information technology–telecommunications and information exchange between systems - local and metropolitan area networks–specific requirements - part 11: Wireless LAN medium access control (MAC) and physical layer (PHY) specifications,” IEEE Std 802.11-2020 (Revision of IEEE Std 802.11-2016), pp. 1–4379, Feb. 2021.
+\bibitem{b10} “IEEE standard for information technology–telecommunications and information exchange between systems local and metropolitan area networks–specific requirements part 11: Wireless LAN medium access control (MAC) and physical layer (PHY) specifications amendment 4: Enhancements for positioning,” IEEE Std 802.11az-2022, pp. 1–248, Mar. 2023.
+\bibitem{b11} F. Liu, J. Liu, Y. Yin, W. Wang, D. Hu, P. Chen, and Q. Niu, “Survey on WiFi-based indoor positioning techniques,” IET Communications, vol. 14, no. 9, pp. 1372–1383, June 2020.
+\bibitem{b12} V. Mollyn, R. Arakawa, M. Goel, C. Harrison, and K. Ahuja, “IMU Poser: Full-body pose estimation using IMUs in phones, watches, and earbuds,” in Proceedings of the 2023 CHI Conference on Human Factors in Computing Systems, ser. CHI ’23. New York, NY, USA: Association for Computing Machinery, Apr. 2023.
+\bibitem{b13} B. Thorbjornsen, N. M. White, A. D. Brown, and J. S. Reeve, “Radio frequency (RF) time-of-flight ranging for wireless sensor networks,” Measurement Science and Technology, vol. 21, no. 3, Mar. 2010.
+\bibitem{b14} M. Ibrahim, H. Liu, M. Jawahar, V. Nguyen, M. Gruteser, R. Howard, B. Yu, and F. Bai, “Verification: Accuracy evaluation of WiFi fine time measurements on an open platform,” in Proceedings of the 24th Annual International Conference on Mobile Computing and Networking, ser. MobiCom ’18, Oct. 2018, p. 417–427.
+\bibitem{b15} C. Ma, B. Wu, S. Poslad, and D. R. Selviah, “Wi-Fi RTT ranging performance characterization and positioning system design,” IEEE Transactions on Mobile Computing, vol. 21, no. 2, pp. 740–756, Feb. 2022.
+\bibitem{b16} B. W. Remondi, “Global positioning system carrier phase: Description and use,” Bulletin g\'eod\'esique, vol. 59, no. 4, pp. 361–377, Dec. 1985.
+\bibitem{b17} C. Yang, L. Chen, O. Julien, A. Soloviev, and R. Chen, “Carrier phase tracking of OFDM-based DVB-T signals for precision ranging,” Proceedings of the 30th International Technical Meeting of the Satellite Division of The Institute of Navigation (ION GNSS), pp. 736–748, Sep. 2017.
+\bibitem{b18} H. Dun, C. C. J. M. Tiberius, and G. J. M. Janssen, “Positioning in a multipath channel using OFDM signals with carrier phase tracking,” IEEE Access, vol. 8, pp. 13 011–13 028, Jan. 2020.
+\bibitem{b19} L. Chen, X. Zhou, F. Chen, L.-L. Yang, and R. Chen, “Carrier phase ranging for indoor positioning with 5G NR signals,” IEEE Internet of Things Journal, vol. 9, no. 13, pp. 10 908–10 919, Nov. 2022.
+\bibitem{b20} A. S. Paul and E. A. Wan, “RSSI-based indoor localization and tracking using sigma-point kalman smoothers,” IEEE Journal of Selected Topics in Signal Processing, vol. 3, no. 5, pp. 860–873, Oct. 2009.
+\bibitem{b21} S. Xia, Y. Liu, G. Yuan, M. Zhu, and Z. Wang, “Indoor fingerprint positioning based on Wi-Fi: An overview,” ISPRS International Journal of Geo-Information, vol. 6, no. 5, Apr. 2017.
+\bibitem{b22} N. Singh, S. Choe, and R. Punmiya, “Machine learning based indoor localization using Wi-Fi RSSI fingerprints: An overview,” IEEE Access, vol. 9, pp. 127 150–127 174, Sep. 2021.
+\bibitem{b23} Z. Yang, Z. Zhou, and Y. Liu, “From RSSI to CSI: Indoor localization via channel response,” ACM Comput. Surv., vol. 46, no. 2, Dec. 2013.
+\bibitem{b24} J. M. Rocamora, I. W.-H. Ho, M. Mak, and A. P.-T. Lau, “Survey of CSI fingerprinting-based indoor positioning and mobility tracking systems,” IET Signal Processing, vol. 14, no. 7, pp. 407–419, Sep. 2020.
+\bibitem{b25} M. Kotaru, K. Joshi, D. Bharadia, and S. Katti, “SpotFi: decimeter level localization using WiFi,” SIGCOMM Comput. Commun. Rev., vol. 45, no. 4, p. 269–282, Aug. 2015.
+\bibitem{b26} A. Sheikh, J. Romme, J. Govers, A. Farsaei, and C. Bachmann, “Phase based ranging in narrowband systems with missing/interfered tones,” IEEE Internet of Things Journal, vol. 10, no. 17, pp. 15 171–15 185, Sep. 2023.
+\bibitem{b27} D. Vasisht, S. Kumar, and D. Katabi, “Decimeter-Level localization with a single WiFi access point,” in USENIX Symposium on Networked Systems Design and Implementation (NSDI). Santa Clara, CA: USENIX Association, Mar. 2016, pp. 165–178.
+\bibitem{b28} E. Khorov, I. Levitsky, and I. F. Akyildiz, “Current status and directions of IEEE 802.11be, the future Wi-Fi 7,” IEEE Access, vol. 8, pp. 88 664–88 688, May 2020.
+\bibitem{b29} X. Li, K. Pahlavan, M. Latva-aho, and M. Ylianttila, “Comparison of indoor geolocation methods in DSSS and OFDM wireless LAN systems,” in Vehicular Technology Conference Fall (VTC2000), vol. 6, Sep. 2000, pp. 3015–3020.
+\bibitem{b30} A. Marcaletti, M. Rea, D. Giustiniano, V. Lenders, and A. Fakhreddine, “Filtering noisy 802.11 time-of-flight ranging measurements,” in Proceedings of the 10th ACM International on Conference on Emerging Networking Experiments and Technologies, Dec. 2014, p. 13–20.
+\bibitem{b31} M. Rea, A. Fakhreddine, D. Giustiniano, and V. Lenders, “Filtering noisy 802.11 time-of-flight ranging measurements from commoditized WiFi radios,” IEEE/ACM Transactions on Networking, vol. 25, no. 4, pp. 2514–2527, Aug. 2017.
+\bibitem{b32} L. Banin, O. Bar-Shalom, N. Dvorecki, and Y. Amizur, “Scalable Wi-Fi client self-positioning using cooperative FTM-sensors,” IEEE Transactions on Instrumentation and Measurement, vol. 68, no. 10, pp. 3686–3698, Oct. 2019.
+\bibitem{b33} K. Jiokeng, G. Jakllari, A. Tchana, and A.-L. Beylot, “When FTM discovered MUSIC: Accurate WiFi-based ranging in the presence of multipath,” in IEEE Conference on Computer Communications (INFOCOM), July 2020, pp. 1857–1866.
+\bibitem{b34} O. Woodman and R. Harle, “Pedestrian localisation for indoor environments,” in Proceedings of the 10th International Conference on Ubiquitous Computing, Sep. 2008, p. 114–123.
+\bibitem{b35} A. Poulose, J. Kim, and D. S. Han, “A sensor fusion framework for indoor localization using smartphone sensors and Wi-Fi RSSI measurements,” Applied Sciences, vol. 9, no. 20, Oct. 2019.
+\bibitem{b36} Y. Yu, R. Chen, L. Chen, G. Guo, F. Ye, and Z. Liu, “A robust dead reckoning algorithm based on Wi-Fi FTM and multiple sensors,” Remote Sensing, vol. 11, no. 5, Mar. 2019.
+\bibitem{b37} X. Liu, B. Zhou, P. Huang, W. Xue, Q. Li, J. Zhu, and L. Qiu, “Kalman filter-based data fusion of Wi-Fi RTT and PDR for indoor localization,” IEEE Sensors Journal, vol. 21, no. 6, pp. 8479–8490, Jan. 2021.
+\bibitem{b38} G. Guo, R. Chen, F. Ye, Z. Liu, S. Xu, L. Huang, Z. Li, and L. Qian, “A robust integration platform of Wi-Fi RTT, RSS signal, and MEMS-IMU for locating commercial smartphone indoors,” IEEE Internet of Things Journal, vol. 9, no. 17, pp. 16 322–16 331, Sep. 2022.
+\bibitem{b39} E. Sourour, H. El-Ghoroury, and D. McNeill, “Frequency offset estimation and correction in the IEEE 802.11a WLAN,” in IEEE 60th Vehicular Technology Conference (VTC), vol. 7, Sep. 2004, pp. 4923–4927.
+\bibitem{b40} V. V. Ratnam and A. F. Molisch, “Continuous analog channel estimation-aided beamforming for massive MIMO systems,” IEEE Transactions on Wireless Communications, vol. 18, no. 12, pp. 5557–5570, Dec. 2019.
+\bibitem{b41} V. V. Ratnam, “Performance of analog beamforming systems with optimized phase noise compensation,” IEEE Transactions on Signal Processing, vol. 68, pp. 5334–5348, Sep 2020.
+\bibitem{b42} V. V. Ratnam, H. Chen, H. H. Chang, A. Sehgal, and J. Zhang, “Optimal preprocessing of WiFi CSI for sensing applications,” IEEE Transactions on Wireless Communications, pp. 1–14, Mar. 2024.
+\bibitem{b43} D. Zhang, Y. Hu, Y. Chen, and B. Zeng, “Calibrating phase offsets for commodity WiFi,” IEEE Systems Journal, vol. 14, no. 1, pp. 661–664, Mar. 2020.
+\bibitem{b44} Y. Zhuo, H. Zhu, H. Xue, and S. Chang, “Perceiving accurate CSI phases with commodity WiFi devices,” in IEEE Conference on Computer Communications (INFOCOM), May 2017, pp. 1–9.
+\bibitem{b45} A. Zubow, P. Gawłowicz, and F. Dressler, “On phase offsets of 802.11 ac commodity WiFi,” in 16th Annual Conference on Wireless On-demand Network Systems and Services Conference (WONS), Mar. 2021, pp. 1–4.
+\bibitem{b46} B. Rao and K. Hari, “Performance analysis of Root-Music,” IEEE Transactions on Acoustics, Speech, and Signal Processing, vol. 37, no. 12, pp. 1939–1949, Dec. 1989.
+\bibitem{b47} G. Welch, G. Bishop et al., “An introduction to the kalman filter,” Nov. 1995.
+\bibitem{b48} E. Hyyti\"a and J. Virtamo, “Random waypoint mobility model in cellular networks,” Wireless Networks, vol. 13, no. 2, pp. 177–188, Apr. 2007.
+\bibitem{b49} “IEEE standard for information technology–telecommunications and information exchange between systems local and metropolitan area networks–specific requirements part 11: Wireless LAN medium access control (MAC) and physical layer (PHY) specifications amendment 1: Enhancements for high-efficiency WLAN,” IEEE Std 802.11ax-2021, pp. 1–767, May 2021.
+\bibitem{b50} Z. Jiang, T. H. Luan, X. Ren, D. Lv, H. Hao, J. Wang, K. Zhao, W. Xi, Y. Xu, and R. Li, “Eliminating the barriers: Demystifying Wi-Fi baseband design and introducing the picoscenes Wi-Fi sensing platform,” IEEE Internet of Things Journal, vol. 9, no. 6, pp. 4476–4496, Mar. 2022.
+\bibitem{b51} R. Venkataramani and Y. Bresler, “Optimal sub-Nyquist nonuniform sampling and reconstruction for multiband signals,” IEEE Transactions on Signal Processing, vol. 49, no. 10, pp. 2301–2313, Oct. 2001.
+\bibitem{b52} Y. Wu, H.-B. Zhu, Q.-X. Du, and S.-M. Tang, “A survey of the research status of pedestrian dead reckoning systems based on inertial sensors,” International Journal of Automation and Computing, vol. 16, no. 1, pp. 65–83, Feb. 2019.
+\bibitem{b53} A. Pages-Zamora, J. Vidal, and D. Brooks, “Closed-form solution for positioning based on angle of arrival measurements,” in 13th IEEE International Symposium on Personal, Indoor and Mobile Radio Communications, vol. 4, Sep. 2002, pp. 1522–1526.
+\bibitem{b54} J. Xiong and K. Jamieson, “ArrayTrack: A fine-grained indoor location system,” in Proceedings of the 10th USENIX Symposium on Networked Systems Design and Implementation. Lombard, IL: USENIX Association, Apr. 2013, pp. 71–84.
+\end{thebibliography}
+
+\begin{IEEEbiography}{Vishnu V. Ratnam} (S’10–M’19–SM’22) 于2012年从印度理工学院卡拉格普尔分校获得电子与电气通信工程学士（荣誉）学位，并作为2012届的毕业生代表毕业。他于2018年从美国加利福尼亚州洛杉矶的南加州大学获得电气工程博士学位。他目前在美国德克萨斯州普莱诺的三星美国研究中心标准与移动创新实验室担任二级高级研究工程师。他的研究兴趣包括 Wi-Fi 标准、无线传感、无线人工智能、毫米波和太赫兹通信。Ratnam 博士曾获得 2016 年 IEEE 泛在无线宽带国际会议 (ICUWB) 的最佳学生论文奖，2012 年的 Bigyan Sinha 纪念奖，并且是 Phi-Kappa-Phi 荣誉学会的成员。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}{Bilal Sadiq} 于2010年从德克萨斯大学奥斯汀分校获得电气和计算机工程博士学位。他目前任职于三星美国研究中心的标准与移动创新实验室。他的研究包括网络渐近理论、排队论、信号处理、优化理论和机器学习在无线通信系统中的应用。Sadiq 博士曾获得 2010 年 9 月 ITC-22 的最佳论文奖。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}{Hao Chen} 分别于2010年和2013年从陕西西安交通大学获得信息工程学士和硕士学位。他于2017年从堪萨斯大学劳伦斯分校获得电气工程博士学位。他目前在三星美国研究中心的标准与移动创新实验室担任高级主任工程师，致力于无线通信、无线传感和定位的人工智能算法设计和原型制作。他的研究兴趣包括网络优化、机器学习和 5G 蜂窝系统。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}{Wei Sun} 于2017年从上海交通大学获得计算机科学学士学位。他于2022年从德克萨斯大学奥斯汀分校获得博士学位。他目前在三星美国研究中心的标准与移动创新实验室担任高级研究工程师。他致力于无线人工智能、无线传感和定位、音频识别和检测的算法设计和原型制作。他的研究兴趣包括基础模型和多模态建模。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}{Shunyao Wu} 于2015年从武汉华中科技大学获得电气工程学士学位。他分别于2017年和2022年从亚利桑那州立大学坦佩分校获得电气工程硕士和博士学位。他目前在三星美国研究中心的标准与移动创新实验室担任高级工程师，致力于调制解调器系统的算法设计和原型制作。他的研究兴趣包括机器学习、5G 蜂窝系统算法设计和硬件实现。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}{Boon Loong Ng} 分别于2001年和2007年从澳大利亚墨尔本大学获得工程学士（电气与电子）学位和工程博士学位。他目前在德克萨斯州普莱诺的三星美国研究中心——标准与移动创新 (SMI) 实验室担任高级研究总监。在2008年至2018年期间，他为 LTE、LTE-A、LTE-A Pro 和 5G NR 技术的 3GPP RAN L1/L2 标准化做出了贡献。他拥有 60 多项关于 LTE/LTE-A/LTE-A Pro/5G 的 USPTO 授权专利，并在全球拥有 100 多项专利申请。自2018年以来，他领导一个研发团队，为商用 5G 和 Wi-Fi 技术开发系统和算法设计解决方案。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}{Jianzhong (Charlie) Zhang} (S’00-M’03-SM’09-F’16) 从美国威斯康星大学麦迪逊分校获得博士学位。他目前是三星美国研究中心的高级副总裁，负责领导 5G/6G 和其他无线系统的研究、原型制作和标准化工作。他还是三星研究院的 corporate VP 和全球 6G 团队负责人。他目前担任 ATIS 北美 Next-G 联盟正式成员组副主席。此前，他曾于2019年5月至2023年5月担任 FiRa 联盟董事会主席，并于2009年至2013年担任 3GPP RAN1 工作组副主席，领导 LTE 和 LTE-Advanced 技术的开发。在2007年加入三星之前，他曾在诺基亚研究中心和摩托罗拉移动工作了6年。他从威斯康星大学麦迪逊分校获得博士学位。Zhang 博士是 IEEE Fellow。
+\end{IEEEbiography}
+
+\end{document}

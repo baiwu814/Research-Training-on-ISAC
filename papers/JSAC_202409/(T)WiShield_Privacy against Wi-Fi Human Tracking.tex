@@ -1,0 +1,423 @@
+\documentclass[journal]{IEEEtran}
+
+% 导入必要的包
+\usepackage[utf8]{inputenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{booktabs} % 用于更漂亮的表格
+
+% 中文支持配置
+% 如果您使用 XeLaTeX 编译器 (推荐)，请取消注释以下两行，并注释掉 CJKutf8 部分
+%\usepackage{xeCJK}
+%\setCJKmainfont{SimSun} % 或者您系统中的其他中文字体
+
+% 如果您使用 pdfLaTeX 编译器，请保持以下设置
+\usepackage{CJKutf8}
+
+% 定义一些常用的数学符号宏，防止编译错误
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+\begin{CJK*}{UTF8}{gbsn} % 开始中文环境 (宋体)
+
+\title{WiShield：针对 Wi-Fi 人体追踪的隐私保护系统}
+
+\author{
+Jingyang Hu, \IEEEmembership{Student Member, IEEE}, Hongbo Jiang, \IEEEmembership{Senior Member, IEEE}, Siyu Chen, \\
+Qibo Zhang, \IEEEmembership{Student Member, IEEE}, Zhu Xiao, \IEEEmembership{Senior Member, IEEE}, Daibo Liu, \IEEEmembership{Member, IEEE}, \\
+Jiangchuan Liu, \IEEEmembership{Fellow, IEEE}, 和 Bo Li, \IEEEmembership{Fellow, IEEE}
+
+[cite_start]\thanks{本文已被 IEEE Journal on Selected Areas in Communications 接收发表 [cite: 1]。}
+[cite_start]\thanks{这是作者的版本，尚未经过完全编辑，内容在最终出版前可能会发生变化 [cite: 2]。}
+[cite_start]\thanks{引文信息: DOI 10.1109/JSAC 2024.3414597 [cite: 3]。}
+\thanks{J. [cite_start]Hu, H. Jiang, S. Chen, Q. Zhang, Z. Xiao 和 D. Liu 就职于中国湖南大学计算机科学与电子工程学院，同时也隶属于中国湖南大学深圳研究院 (e-mail: \{fbhhjy, hongbojiang, csy990406, zhangqibo, zhxiao, dbliu\}@hnu.edu.cn) [cite: 29]。}
+\thanks{J. [cite_start]Liu 就职于加拿大不列颠哥伦比亚省本那比市西蒙弗雷泽大学计算科学学院，同时也隶属于中国南京江行智能研发部 (e-mail: jcliu@sfu.ca) [cite: 30]。}
+\thanks{B. [cite_start]Li 就职于中国香港科技大学计算机科学与工程系 (e-mail: bli@cs.ust.hk) [cite: 31]。}
+}
+
+\markboth{IEEE Journal on Selected Areas in Communications, Vol. [cite_start]XX, No. XX, XX 2023 [cite: 4]}%
+{Hu \MakeLowercase{\textit{et al.}}: WiShield: Privacy against Wi-Fi Human Tracking}
+
+\maketitle
+
+\begin{abstract}
+[cite_start]Wi-Fi 信号包含有关周围传播环境的信息，并已广泛应用于各种感知应用，如手势识别、呼吸监测和室内定位 [cite: 8][cite_start]。然而，这些信息也很容易被窃听者窃取以获取隐私信息 [cite: 9][cite_start]。在本文中，我们提出了 WiShield，这是一个保护使用 Wi-Fi 感知应用的合法用户同时防止未经授权的隐私攻击的新框架 [cite: 10][cite_start]。WiShield 的实现基于一个简单的原理，即对 Wi-Fi 信道状态信息（Channel Status Information, CSI）进行物理加密，以防止窃听者通过窃取的 CSI 推断敏感信息 [cite: 11][cite_start]。为了在加密强度、感知精度和通信质量之间取得平衡，我们设计了一个高效的多目标优化框架，该框架可以安全地将解密密钥传递给合法用户，并防止窃听者的非法窃听 [cite: 12][cite_start]。我们在软件定义无线电（Software Defined Radio, SDR）平台上实现了 WiShield 原型，并进行了广泛的实验，以验证其在常见 Wi-Fi 感知应用中的有效性 [cite: 13][cite_start]。我们相信，WiShield 的实施可以提高 Wi-Fi 感知应用的隐私标准，也是迈向通感一体化（Integrated Sensing and Communications, ISAC）整合的重要一步 [cite: 14]。
+\end{abstract}
+
+\begin{IEEEkeywords}
+[cite_start]移动与无线安全，Wi-Fi 感知，隐私保护 [cite: 15]。
+\end{IEEEkeywords}
+
+\section{引言}
+[cite_start]\IEEEPARstart{近}{年}来，随着 Wi-Fi 网络部署的日益广泛，基于 Wi-Fi 的定位 [1]-[8] 和感知技术 [9]-[17] 发展迅速 [cite: 17][cite_start]。不幸的是，虽然 Wi-Fi 设备给我们带来了便利，但这些无处不在的射频（Radio Frequency, RF）信号也给我们带来了真正的安全和隐私风险 [cite: 18, 41][cite_start]。我们淹没在这些射频信号中（特别是信道状态信息 CSI [18]），黑客可以轻易窃听我们的位置、移动和其他私密的生理信息（如呼吸和心跳）[cite: 42][cite_start]。窃贼可以利用这种感知能力来识别空置的房屋，或大规模挖掘移动和活动跟踪数据，以深入了解受害者的行为模式 [cite: 43][cite_start]。此类隐私泄露很容易导致定向广告或健康保险定价等滥用行为 [cite: 44]。
+
+[cite_start]虽然这种隐私威胁已被认识多年 [19]-[21]，但现有的防御策略 [22]-[24] 难以在确保通信质量的同时抵御感知攻击 [cite: 45][cite_start]。PhyCloak [22] 提出了一种信号混淆技术，通过扭曲通信信号中泄露的隐私物理信息，仅保护合法用户的感知能力 [cite: 46][cite_start]。IRShield [24] 利用放置在接入点（Access Point, AP）旁的智能反射面（Intelligent Reflecting Surfaces, IRSs）来扰乱 CSI，从而使所有感知尝试无效 [cite: 47][cite_start]。遗憾的是，该方案与 Wi-Fi 向 ISAC（通感一体化）[25] 演进的主流方向相悖，后者强调接纳合法的感知用户 [cite: 48][cite_start]。另一种选择是将房屋改造成法拉第笼（Faraday cages），用金属或锡箔覆盖墙壁 [cite: 49][cite_start]。这种解决方案虽然有效地抑制了相邻住宅之间的无线信号传输，但也限制了家庭场所内其他必要信号（如蜂窝通信）的运行 [cite: 50][cite_start]。因此，现有的解决方案要么以牺牲通信质量为代价来防御感知攻击，要么无法支持多个合法用户 [cite: 51]。
+
+[cite_start]在本文中，我们提出了 WiShield，这是一种防御 Wi-Fi 感知攻击同时支持多个合法用户的新型系统 [cite: 52, 60][cite_start]。如图 1 所示，我们利用 Wi-Fi 的多输入多输出（Multiple-Input Multiple-Output, MIMO）能力，对感知主体设备接收到的 CSI 进行物理加密 [cite: 61][cite_start]。我们将密钥传递给合法的感知用户，以保护他们利用 Wi-Fi CSI 执行感知应用的能力 [cite: 62][cite_start]。一方面，WiShield 与现有的 Wi-Fi 标准完全兼容，因此不需要额外的硬件成本 [cite: 63][cite_start]。另一方面，合法用户的 Wi-Fi 通信质量可以得到很好的保留 [cite: 64]。
+
+\begin{figure}[htbp]
+\centering
+% 图片占位符：图 1
+\fbox{\parbox{0.9\linewidth}{在此处插入 Figure 1 (WiShield 愿景图)}}
+[cite_start]\caption{WiShield 愿景：保护合法用户 (Bob) 的通信和感知能力，同时通过安全传递解密密钥来防止窃听者 (Eve) 的隐私攻击 [cite: 40]。}
+\label{fig:vision}
+\end{figure}
+
+[cite_start]与现有工作相比，WiShield 具有三个主要优势。首先，WiShield 有效地限制了攻击者对 Wi-Fi 感知数据的推断 [cite: 65][cite_start]。通过混淆 Wi-Fi CSI，我们的方法将导致诸如位置、人数、居住者的生理状态和健康指标等推断结果出错 [cite: 66][cite_start]。其次，由于 WiShield 本身不发射任何信号，我们的防御很难被检测到，且攻击者在没有获得密钥的情况下很难攻破这种防御 [cite: 67][cite_start]。最后，我们以软件形式使 WiShield 与当前的 Wi-Fi 框架完美兼容，WiShield 可以在保护合法用户通信质量的同时启动防御 [cite: 68]。
+
+[cite_start]尽管如此，WiShield 的实现仍面临两大挑战 [cite: 69][cite_start]。第一个挑战是如何设计一种与现有 Wi-Fi 系统兼容的信道加解密算法，以满足实际的多用户需求 [cite: 70][cite_start]。为了防御感知攻击，现有的安全解决方案通常诉诸于任意的信道加扰 [cite: 71][cite_start]。事实上，常规通信安全与感知安全之间存在明显区别：前者处理的是数字明文，而后者涉及物理明文（Physical Plaintexts） [cite: 72][cite_start]。因此，我们可以以物理方式对其进行形式化加密，以防止 Eve 的窃听，而不对 Bob 造成伤害 [cite: 73][cite_start]。具体来说，我们可以利用（数字）Wi-Fi MIMO 波束成形器（Beamformers）[26] 来物理改变物理明文长训练序列（Long Training Sequence, LTS）的传输特性 [cite: 74][cite_start]。只要波束成形器序列（相当于加密密钥）保持机密，我们的物理明文就能被有效加密，从而对缺乏密钥知识的 Eve 隐藏 [cite: 75]。
+
+[cite_start]第二个挑战是如何在解密后从 CSI 中提取各种参数以支持感知应用 [cite: 76][cite_start]。为了解决这一挑战，我们使用最大似然估计（Maximum Likelihood Estimation, MLE）从解密的 CSI 中估计参数 [cite: 77][cite_start]。值得注意的是，WiShield 从头到尾都不需要知道窃听者的具体位置 [cite: 78][cite_start]。我们认为 WiShield 在提高被动跟踪系统的隐私门槛方面做得非常出色 [cite: 79][cite_start]。我们建议将 WiShield 系统集成到未来的硬件系统中，以抵御感知攻击的威胁，同时保护合法用户的通信质量 [cite: 80]。
+
+综上所述，WiShield 的主要贡献包括：
+\begin{itemize}
+    [cite_start]\item 我们实现了一个可用于多用户场景的 Wi-Fi 感知攻击防御系统 [cite: 82][cite_start]。WiShield 可以防止未经授权的隐私攻击，同时确保合法用户的通信能力 [cite: 83]。
+    [cite_start]\item 我们设计了一种源定义的信道加密方案，以保持与 Wi-Fi 的兼容性，同时提供适应性控制以满足多用户场景中所有参与者的需求 [cite: 84]。
+    [cite_start]\item 我们使用 MLE 算法从解密的 CSI 中进行参数估计，并将这些参数用于基于 Wi-Fi 的感知应用 [cite: 85]。
+    [cite_start]\item 我们在 USRP 上实现了 WiShield 原型并进行了广泛的实验 [cite: 86][cite_start]。实验结果证明，WiShield 可以在不影响合法用户通信质量的情况下抵御感知攻击 [cite: 87]。
+\end{itemize}
+
+[cite_start]本文的其余部分组织如下。我们在第二节简要介绍了相关工作 [cite: 88][cite_start]。在第三节，我们概述了背景并列出了构成我们工作基础的威胁模型 [cite: 89][cite_start]。第四节深入探讨了 WiShield 系统设计的细节 [cite: 90][cite_start]。随后，第五节阐述了 WiShield 的实现，而第六节对系统进行的评估进行了全面分析 [cite: 91][cite_start]。在第七节中，我们将对 WiShield 系统进行讨论。最后，我们在第八节用总结性发言结束本文 [cite: 92]。
+
+\section{相关工作}
+[cite_start]在本节中，我们首先介绍由无线感知技术引起的隐私安全相关工作 [cite: 94][cite_start]。然后，我们总结现有的对抗这些感知攻击的策略 [cite: 95][cite_start]。最后，我们概述了与以往策略相比我们的优势和差异 [cite: 96]。
+
+[cite_start]Wi-Fi 感知由于其广泛部署的基础设施设备而引起了广泛关注 [cite: 97][cite_start]。然而，这种便利也带来了严重的安全风险。最常见的感知攻击是对移动设备（手机、平板电脑等）的击键窃听 [cite: 98][cite_start]。WiKey [27] 首次利用击键引起的 CSI 变化来进行击键推断 [cite: 99][cite_start]。随后，WindTalker [19] 将这种击键推理扩展到移动设备上的数字密码，并结合深度学习实现了更准确的击键推理 [cite: 100][cite_start]。接下来，Fang 等人 [28] 开始寻求推理算法的创新 [cite: 101][cite_start]。他们以英语语言结构分析为切入点，基于 CSI 进行文本语义推断 [cite: 102][cite_start]。最近，WiPOS [29] 考虑了商场中暴露于 Wi-Fi 环境的固定位置 POS 终端的按键窃听风险 [cite: 103][cite_start]。SpiderMon [30] 提供了一个新场景，开始尝试使用商业蜂窝塔传输的信号进行被动 ATM 按键密码窃听 [cite: 104][cite_start]。WINK [31] 利用击键过程的时空特性，设计了一种无需训练的密码推理算法 [cite: 105][cite_start]。随着新 Wi-Fi 标准的推广，WiKI-Eve [20] 开始使用 Wi-Fi 波束成形反馈信息（Beamforming Feedback Information, BFI） [cite: 106][cite_start]。与需要硬件破解才能获取的 CSI 相比，BFI [32] 明文传输的特性具有更严重的安全风险 [cite: 107]。
+
+[cite_start]另一种类型的感知攻击侧重于人体轨迹和位置 [cite: 108][cite_start]。通过窃取 Wi-Fi 物理层信息，可以从信道信息中推断出人体运动轨迹 [cite: 109][cite_start]。Banerjee 等人 [33] 使用滑动窗口作为信道变化的度量，在支持 MIMO 的 Wi-Fi 路由器上实施感知攻击，专注于检测视距（Line-of-Sight, LOS）交叉 [cite: 132][cite_start]。Zhu 等人 [23] 使用智能手机跟踪整个室内运动轨迹，甚至识别目标在特定部分的运动 [cite: 133][cite_start]。此外，Camurati 等人 [34] 通过大量实验证明，利用 Wi-Fi 芯片组的射频信号可以实现长距离硬件级侧信道攻击 [cite: 134]。
+
+[cite_start]为了对抗这种普遍存在的感知攻击，现有的防御解决方案主要基于信道混淆 [cite: 135][cite_start]。Qiao 等人 [22] 使用全双工无线电向射频信号中注入随机信号以抵抗感知攻击 [cite: 136][cite_start]。然而，全双工实现需要高昂的硬件成本和复杂的系统架构来抵消自干扰 [cite: 137][cite_start]。Yao 等人 [35] 也提出并扩展了这种信号混淆策略，并使用了几个移动部件（旋转天线、快速风扇等）来优化硬件结构 [cite: 138][cite_start]。IRShield [24] 通过在 AP 附近安装智能反射面（IRS）来物理破坏 CSI，并向信道信息中注入虚假数据流量以抵抗感知攻击 [cite: 139][cite_start]。但这这种无差别的物理防御会干扰合法用户的感知应用 [cite: 140]。
+
+[cite_start]802.11az [36] 使用现代加密和认证标准，如 WPA3（Wi-Fi Protected Access 3）来保护网络通信 [cite: 141][cite_start]。与过去的标准相比，WPA3 提供了更强大的加密算法和更安全的认证方法，有助于防止未经授权的访问和数据泄露 [cite: 142][cite_start]。然而，这种隐私保护策略尚未应用于仍被广泛使用的 LTS [cite: 143]。
+
+[cite_start]为了解决这些问题，我们提出了 WiShield，它利用 Wi-Fi 硬件的 MIMO 技术 [37] 来扰乱信道，防止普遍存在的感知攻击，同时保留合法用户的感知和通信能力 [cite: 144][cite_start]。当然，WiShield 的实现需要硬件或固件重构，这也需要一定的硬件成本 [cite: 145][cite_start]。幸运的是，通过修改 Wi-Fi 架构来实现 ISAC 框架 [38] 正日益被视为理想的发展路径 [cite: 146]。
+
+\section{背景与攻击模型}
+[cite_start]在本节中，我们提供 Wi-Fi 感知和几种常用基于 CSI 的感知应用的基本原理 [cite: 148][cite_start]。然后，我们定义攻击模型来表征 Wi-Fi 感知对隐私的潜在风险 [cite: 149][cite_start]。最后，我们简要介绍我们的防御策略原理和可行性研究 [cite: 150]。
+
+\subsection{Wi-Fi 追踪基础}
+[cite_start]我们首先讨论 Wi-Fi 感知的基本原理。Wi-Fi 感知是一种利用 Wi-Fi 信号的信道状态信息来实现各种感知应用的技术 [cite: 152][cite_start]。具体来说，环境中移动目标的存在会显著改变信号传播环境 [cite: 153][cite_start]。本质上，Wi-Fi 感知的基本原理在于 Wi-Fi 信道的变化与物体运动状态之间的相关性 [cite: 154]。
+
+[cite_start]现有的 Wi-Fi 感知应用主要基于长训练序列（Long Training Sequence, LTS）[39] 信号 [cite: 155][cite_start]。LTS 是 Wi-Fi（IEEE 802.11）标准中的一个重要概念，用于帮助 Wi-Fi 系统在接收到信号后进行同步和信道状态估计 [cite: 156][cite_start]。不幸的是，Wi-Fi LTS 未经加密且无法更改，因此任何人在同一 Wi-Fi 环境中都可以使用配备 Wi-Fi 网卡的设备窃听 LTS，而无需注册到 Wi-Fi 网络 [cite: 157]。
+
+[cite_start]当 Wi-Fi 发射器 (Tx) 在第 $m$ 个数据包（基数为 $M$）的第 $n$ 个 OFDM 子载波（基数为 $N$）上发送 LTS 信号 $s_{n,m}$（频域）时，接收 (Rx) 信号变为 $y_{n,m}=h_{n,m}s_{n,m}$，其中 $h_{n,m}$ 代表 Wi-Fi 信道的 CSI [cite: 158][cite_start]。为了获得 CSI，通常执行迫零信道估计算法 [40] 来推导 $y_{n,m}=h_{n,m}/s_{n,m}$。根据 [41]，CSI $h_{n,m}$ 可以建模为 [cite: 159]：
+\begin{equation}
+h_{n,m}=\sum_{k=1}^{K}\alpha_{n,m,k}e^{-j2\pi(f_{c}+n\Delta f)\tau_{m,k}}
+\end{equation}
+[cite_start]其中 $\alpha_{n,m,k}$ 是第 $k$ 条路径上的衰减，$f_{c}$ 表示载波频率，$\Delta f$ 表示子载波间隔，$\tau_{m,k}=\tau_{k}^{S}+\tau_{m,k}^{D}$ 指的是时间延迟：来自任意反射体的静态延迟 $\tau_{k}^{S}$ 和由其运动引起的动态延迟 $\tau_{m,k}^{D}$ [cite: 161, 163]。
+
+[cite_start]CSI 提供了大量关于受主体影响的附近环境状态的信息，因此被广泛用于室内感知应用 [4] [cite: 164][cite_start]。例如，要实现室内感知应用，主要有三种类型的应用：手势识别、呼吸监测和轨迹跟踪 [cite: 165]。
+
+\begin{figure}[htbp]
+\centering
+% 图片占位符：图 2
+\fbox{\parbox{0.9\linewidth}{在此处插入 Figure 2 (三种典型的 Wi-Fi 感知应用)}}
+[cite_start]\caption{三种典型的 Wi-Fi 感知应用。Wi-Fi 感知应用主要利用信道环境中 CSI 的变化来进行人体活动跟踪 [cite: 131]。}
+\label{fig:applications}
+\end{figure}
+
+[cite_start]第一个常见的 Wi-Fi 应用是手势识别，通过分析不同手势引起的 Wi-Fi 信道变化来推断和分类相应的动作（见图 2(a)）[cite: 166, 174][cite_start]。如图 2(b) 所示，基于 Wi-Fi 的体征监测系统利用信道环境中呼吸时胸腔的变化，并结合先进的信号处理算法进行呼吸监测 [cite: 174][cite_start]。另一种应用类型使用 CSI 参数，如到达角 (Angle of Arrival, AoA)、飞行时间 (Time of Flight, ToF) 和多普勒频移 (Doppler Frequency Shift, DFS) 进行轨迹跟踪（见图 2(c)）[cite: 175]。
+
+\subsection{攻击模型}
+[cite_start]尽管基于 Wi-Fi 的室内跟踪由于 Wi-Fi 设备的广泛部署而前景广阔，但它也带来了隐私问题 [cite: 177][cite_start]。如 III-A 节所述，现有的 Wi-Fi 标准主要使用 LTS 来执行 CSI 估计和通信符号解码 [cite: 178][cite_start]。不幸的是，Wi-Fi LTS 是未加密的信息 [42]，因此同一 Wi-Fi 环境中的任何人都可以使用配备 Wi-Fi 网卡的设备窃听 LTS 并使用特殊软件（如 Picoscenes [43], Nexmon [44] 等）提取 CSI [cite: 179]。
+
+[cite_start]我们考虑这样一个场景：受害者 Bob 使用他的移动设备（智能手机或平板电脑）连接到具有共享密码或无密码保护的 Wi-Fi 接入点 (AP) [cite: 180][cite_start]。在图书馆、办公楼、机场和商场等公共场所，这是一个合理的假设，因为这些地方通常为了方便顾客或访客而提供 Wi-Fi 接入 [cite: 181][cite_start]。AP (Alice) 可以防止窃听者 (Eves，见图 1) 窃取 Bob 的位置，同时保持合法用户 Bob 的通信和定位能力 [cite: 182][cite_start]。作为攻击者，Eve 只是一个拥有 Wi-Fi 网卡的普通用户 [cite: 183]。
+
+[cite_start]在我们的威胁模型中，Eve 通过窃听 CSI 向量来推断附近受害者 Bob 的隐私信息（如当前位置信息、轨迹、体征和手势）[cite: 184][cite_start]。为了专注于防御模型，WiShield 考虑了手势识别、呼吸监测和轨迹跟踪任务 [cite: 185][cite_start]。此外，Bob 和 Eve 使用公知的模型进行人体活动跟踪：手势识别模型 (Widar3.0 [45])，呼吸监测模型 (MUSE-Fi [25])，以及室内定位模型（如 mD-Track [3], Widar 2.0 [5] 和 SpotFi [4]）来量化 WiShield 对抗恶意窃听的有效性 [cite: 186, 196][cite_start]。最后，AP 始终被视为可信方。具体来说，我们的威胁模型赋予攻击者 Eve 以下能力 [cite: 187]：
+
+[cite_start]\textbf{攻击者位置：}我们假设敌对窃听者 Eve 有兴趣在封闭空间（家庭、会议室等）监视受害者 Bob 的活动 [cite: 188][cite_start]。Eve 可以在环境中任何可以连接到 AP 的地方发起窃听，因此我们不对 Eve 的位置施加限制 [cite: 189][cite_start]。我们允许 Eve 选择任何合适的窃听位置以最大化其窃听机会 [cite: 190]。
+
+[cite_start]\textbf{攻击者硬件：}为了实现其目标，窃听者 Eve 使用常规 Wi-Fi 网卡（例如笔记本电脑中使用的网卡）[cite: 191][cite_start]。我们假设 Eve 配置了两根天线来窃听 Bob 设备接收到的 CSI，以推断 Bob 的活动 [cite: 192][cite_start]。需要强调的是，Eve 窃听的是 Bob 设备与 AP 之间传输的 CSI 信息，因此使用更多天线不会增强 Eve 的攻击能力 [cite: 193]。
+
+[cite_start]\textbf{攻击者算法：}为了遵循开放设计原则，即机制的安全性不应依赖于其设计或实现的保密性 [cite: 194][cite_start]。我们让 Bob 和 Eve 使用相同的室内定位模型 [cite: 195]。
+
+\subsection{可行性研究}
+[cite_start]我们在这里使用简单的实验来进一步介绍 WiShield 的设计并验证其可行性 [cite: 262]。
+
+[cite_start]\textbf{CSI 混淆：}如 III-B 节所讨论的，窃听者 Eve 破解 AP 以获取 CSI 向量 $h=[h_{m}]$，然后执行攻击者算法以推断受害者 Bob 的敏感活动 [cite: 263][cite_start]。WiShield 的基本思想是使用 MIMO 波束成形器 [46] 来加密 CSI 向量 $h$，以防止 Eve 执行敏感活动推断 [cite: 264]。
+
+[cite_start]具体来说，我们使用加密矩阵 $\Psi$ 来扰乱 LTS 向量 $l=[l_{m}]$，结果 $l'=\tilde{\partial}(l,\Psi)$ 导致 CSI 向量 $[h_{m}]$ 加密为 [cite: 272]：
+\begin{equation}
+h_{m}=y_{m}/l'_{m}
+\end{equation}
+[cite_start]经过上述加密过程，Eve 如果没有加密矩阵 $\Psi$ 的密钥，就无法使用窃听到的 CSI 进行敏感活动推断 [cite: 275][cite_start]。我们用一个简单的案例来简要描述这个加密过程，以 4 个发射天线的 LTS 向量 $l$ 为例 [cite: 276][cite_start]。加密矩阵 $\Psi$ 中的每个实例的分量是对应于发射端 4 个天线的 4 个复数值，与 $l$ 相乘后通过 AP 的 4 个发射天线获得 4 个独立扰乱的传输，这些传输被 Bob 和 Eve 的 Rx 天线接收 [cite: 277, 279]。
+
+[cite_start]我们设置了一些简单的实验来研究 CSI 混淆对感知应用的影响 [cite: 280][cite_start]。我们使用两个 4 天线 USRP 作为 AP，另一个 4 天线 USRP 作为 Eve [cite: 281][cite_start]。我们首先展示 CSI 混淆对参数估计的结果，如图 3(a) 和图 3(b) 所示 [cite: 282][cite_start]。在使用 CSI 混淆后，AoA 和 ToF 被扰乱。然后我们展示信号混淆对手势识别任务的影响 [cite: 283][cite_start]。我们展示了频域中的推拉动作结果 [cite: 284][cite_start]。信号加密后，图 3(c) 中的结果完全混淆，以至于无法区分，如图 3(d) 所示 [cite: 285][cite_start]。接下来，我们展示信号混淆对呼吸监测的影响 [cite: 286][cite_start]。图 3(e) 中的监测结果非常接近真实值，但在图 3(f) 中，信号混淆后无法获得有效的呼吸波形 [cite: 287][cite_start]。最后，我们使用 mD-track 算法作为轨迹跟踪算法来比较 CSI 混淆后的轨迹 [cite: 288][cite_start]。图 3(g) 显示了未使用加密矩阵 $\Psi$ 恢复的轨迹 [cite: 289][cite_start]。我们进一步使用加密矩阵 $\Psi$ 进行 CSI 混淆以获得图 3(h) [cite: 290][cite_start]。显然，应用 $\Psi$ 后，轨迹被破坏，Eve 在没有密钥的情况下无法恢复轨迹 [cite: 291]。
+
+\begin{figure}[htbp]
+\centering
+% 图片占位符：图 3
+\fbox{\parbox{0.9\linewidth}{在此处插入 Figure 3 (加密与不加密的 CSI 感知结果示例)}}
+[cite_start]\caption{加密与不加密的 CSI 感知结果示例。(a)-(b) AoA 和 ToF 在加密后被扰乱，(c)-(d) 频域中的手势识别动作，(e)-(f) 时域中的呼吸波形，以及 (g)-(h) 人体轨迹跟踪。加密后，CSI 感知结果将被混淆 [cite: 258, 259, 260]。}
+\label{fig:encryption_impact}
+\end{figure}
+
+[cite_start]\textbf{对合法用户的影响：}虽然使用加密矩阵 $\Psi$ 可以有效抵御非法窃听，但这种方法可能会降低合法用户的通信质量 [cite: 300][cite_start]。我们使用一组实验来展示加密和解密对通信质量的影响 [cite: 301][cite_start]。我们将射频前端的传输功率固定为 20 dBm，4 天线 USRP 端的增益固定为 3 dBi [cite: 302][cite_start]。我们使用 AP 发送 1000 个带有加密 LTS 的数据包，另一个天线节点观察 LTS 信号的信噪比 (SNR) 分布 [cite: 303, 304][cite_start]。如图 4 所示，加密 LTS 信号的平均 SNR 为 4.8 dB，低于 Wi-Fi 网络通常要求的 5 dB [cite: 305][cite_start]。当信噪比低于 5 dB 时，LTS 的误码率显着增加 [47] [cite: 306][cite_start]。同时，我们将密钥传递给合法用户以解密 CSI [cite: 307][cite_start]。值得注意的是，使用 $\Psi$ 无法完全恢复 CSI，因为加密过程可能会对 CSI 造成不可逆的失真 [cite: 308][cite_start]。我们使用两个不同的 $\Psi$ 进行实验，观察解密对 SNR 的影响 [cite: 309][cite_start]。从图 4 所示的结果来看，解密可以有效地提高平均 SNR，但仍低于正常通信 [cite: 310][cite_start]。此外，$\Psi_{2}$ 的平均信噪比高于 $\Psi_{1}$，这表明我们可以通过选择最佳的 $\Psi$ 来提高 SNR [cite: 311]。
+
+\begin{figure}[htbp]
+\centering
+% 图片占位符：图 4
+\fbox{\parbox{0.9\linewidth}{在此处插入 Figure 4 (加密对 SNR 的影响)}}
+[cite_start]\caption{使用信道加密会降低 Rx 端接收信号的 SNR，使用不同的解密矩阵可以在不同程度上补偿信道损耗 [cite: 299]。}
+\label{fig:snr}
+\end{figure}
+
+\section{WiShield 系统设计}
+\subsection{系统概览}
+[cite_start]在本节中，我们简要概述 WiShield 的整体工作流程 [cite: 313][cite_start]。作为信号发送方，AP 控制整个室内 Wi-Fi 链路，并使用加密矩阵 $\Psi$ 对信道信息进行加密 [cite: 314][cite_start]。AP 通过密钥分发策略将密钥发送给合法的感知用户，任何没有密钥的非法窃听者都无法使用加密的信道信息进行隐私攻击 [cite: 315][cite_start]。在 IV-B 节中，我们详细介绍了加密过程，并提出了一种新的失真度量方法 [cite: 316][cite_start]。然后我们在 IV-C 节中介绍加密间隔设置 [cite: 317][cite_start]。在 IV-D 节中，我们提出了一种多目标优化策略，使系统在加密强度、感知精度和通信质量之间取得平衡 [cite: 318][cite_start]。最后，在 IV-E 节中，我们详细介绍了 CSI 加密和解密过程以及密钥分发策略，在 IV-F 节中，我们使用 MLE 算法从解密的 CSI 中估计参数 [cite: 319]。
+
+\subsection{CSI 时间序列加密}
+[cite_start]WiShield 的核心是使用矩阵 $\Psi$ 加密 Wi-Fi CSI，以防止攻击者 Eve 通过 Wi-Fi 感知推断 Bob 的隐私信息 [cite: 321][cite_start]。在本节中，我们将详细介绍我们的加密策略 [cite: 322][cite_start]。为了更好地表征加密策略，我们在介绍加密策略时仅考虑一个 Wi-Fi 网卡（该策略可以轻松扩展以覆盖多个网卡）[cite: 323]。具体来说，我们考虑由第 $q$ 个发射天线的 $M \times M$ 波束成形矩阵组成的 CSI 矩阵：
+\begin{equation}
+H=[h_{1},...,h_{q},...,h_{Q^{Tx}}]
+\end{equation}
+[cite_start]相应的加密矩阵可以表示为 [cite: 327]：
+\begin{equation}
+\Psi=[\Psi_{1},\cdot\cdot\cdot,\Psi_{q},\cdot\cdot\cdot,\Psi_{Q^{Tx}}]^{T}
+\end{equation}
+[cite_start]其中 $\Psi_{q}=diag(d_{m})_{q}$ 表示应用于第 $q$ 个发射天线的大小为 $M \times M$ 的波束成形矩阵，$d_{m}$ 表示与第 $m$ 个数据包 (CSI) 有关的独特复数值 [cite: 330][cite_start]。根据公式 (3) 和公式 (4)，在接收天线处获得的失真 CSI 可以表示为 [cite: 356]：
+\begin{equation}
+\hat{H}=H\Psi
+\end{equation}
+[cite_start]需要注意的是，我们加密了 $M$ 个 CSI 时间序列，这意味着密钥长度为 $M$。为了衡量加密过程的有效性，我们利用信噪比 (SNR) 来量化相对熵 [cite: 359][cite_start]。虽然 SNR 是通信中众所周知的信号质量指标，但我们需要对其进行改进以适应感知任务 [cite: 360][cite_start]。根据公式 (1)，与人体运动相关的动态分量 $h_{m}^{D}$ 可以表示为 [cite: 361]：
+\begin{equation}
+h_{m}^{D}=\sum_{k\in K_{D}}\alpha_{m,k}^{D}e^{-j2\pi f_{c}\tau_{k}^{D}}
+\end{equation}
+[cite_start]无线信道中环境反射的静态分量 $h_{m}^{S}$ 为 [cite: 364]：
+\begin{equation}
+h_{m}^{S}=\sum_{k\in K_{S}}\alpha_{m,k}^{S}e^{-j2\pi f_{c}\tau_{k}^{S}}
+\end{equation}
+[cite_start]我们修改后的 SNR 定义如下 [cite: 366]：
+\begin{equation}
+\eta_{S}=\frac{1}{M}\sum_{m=1}^{M}\frac{|h_{m}^{D}|^{2}}{|h_{m}^{S}|^{2}+\sigma^{2}}
+\end{equation}
+[cite_start]其中 $\sigma^{2}$ 表示高斯白噪声的方差 [cite: 369][cite_start]。从公式 (8) 可以看出，当 $\eta_{S}$ 的值越大时，动态分量所占比例越大，这意味着动态反射信号越强，感知效果越好 [cite: 370][cite_start]。然而，WiShield 的加密过程是基于 MIMO 的，公式 (8) 没有考虑 MIMO 加密引起的失真 [cite: 371][cite_start]。我们在这里使用一种称为 **信号与失真加噪声比 (Signal-to-Distortion-plus-Noise Ratio, SDNR)** 的新信号失真测量方案，我们使用 $\hat{h}_{m}$ 表示加密的 CSI，SDNR $\eta_{SD}$ 可以表示为 [cite: 372]：
+\begin{equation}
+\eta_{SD}=\frac{1}{M}\sum_{m=1}^{M}\frac{|\hat{h}_{m}^{D}|^{2}}{|\hat{h}_{m}-h_{m}|^{2}+|h_{m}^{S}|^{2}+\sigma^{2}}
+\end{equation}
+[cite_start]其中 $|\hat{h}_{m}-h_{m}|^{2}$ 代表 MIMO 加密引起的失真，也代表熵增益 [cite: 392][cite_start]。为了验证 SDNR 的有效性，我们使用一个简单的实验来计算原始和加密 CSI 的 $\eta_{SD}$ [cite: 393][cite_start]。如图 5(a) 和 (b) 所示，$\eta_{SD}$ 与 CSI 信号的相似度具有相似的趋势 [cite: 394][cite_start]。为了验证 $\eta_{SD}$ 与感知质量之间的关系，以手势识别任务为例，图 5(c) 展示了四种不同 $\Psi$ 下的平均 $\eta_{SD}$ 和手势识别准确率，这表明 $\eta_{SD}$ 与手势识别准确率之间存在强相关性 [cite: 375][cite_start]。这些结果证明 SDNR 可以有效衡量 Wi-Fi 感知质量 [cite: 376]。
+
+[cite_start]在我们的攻击模型中，$h_{m}$ 主要被攻击者 Eve 用来推断 Bob 的隐私信息，因此由于 MIMO 加密，Eve 窃取的感知信息质量可以表示为 [cite: 383]：
+\begin{equation}
+\eta_{SD}^{Eve}=\frac{1}{Q^{Tx}M}\frac{||\hat{H}^{D}||_{2}^{2}}{||H-\hat{H}||_{2}^{2}+||H^{S}||_{2}^{2}+\sigma^{2}}
+\end{equation}
+[cite_start]其中 $||.||_{2}$ 代表所有 $Q^{Tx}$ CSI 序列的 $l_{2}$ 范数 [cite: 386][cite_start]。由于 Eve 没有获得任何关于密钥的信息（数量为 $Q^{Tx}\times M)$ [cite: 387][cite_start]。为了获得对 Bob 隐私信息推断更有效的观察，Eve 将尝试尽可能多的天线组合来减少密钥 $\Psi$ 的影响 [cite: 388][cite_start]。然而，根据公式 (3) 和公式 (5)，WiShield 将加密所有 CSI 信道，这意味着每个新天线都会引入新的加密 [cite: 389][cite_start]。结果，Eve 无法在没有明确密钥 $\Psi$ 信息的情况下通过观察更多天线观测来获得准确的 CSI [cite: 390]。
+
+\subsection{加密时间确认}
+[cite_start]为了减少信道损耗并增加加密强度，WiShield 使用随机加密时间进行加密 [cite: 395][cite_start]。考虑到加密模型通常在已知且恒定的输入间隔下加密，为了使用随机化加密时间，我们使用图 6 所示的加密时间策略 [cite: 396][cite_start]。具体来说，为了执行随机化加密时间，我们控制两个加密时间之间的间隔为 [cite: 396]：
+\begin{equation}
+t_{m}=(m+\delta_{m})\Delta t
+\end{equation}
+[cite_start]其中 $\delta_{m}\in[-1,1]$ 代表第 $m$ 个数据包的随机化比率，$\Delta t$ 是一个恒定的时间段 [cite: 407][cite_start]。使用这种不规则的加密时间策略，Eve 如果没有预先训练的神经网络就无法执行 CSI 序列恢复 [cite: 408]。
+
+\begin{figure}[htbp]
+\centering
+% 图片占位符：图 6
+\fbox{\parbox{0.9\linewidth}{在此处插入 Figure 6 (加密时间随机化策略)}}
+[cite_start]\caption{WiShield 使用随机加密间隔来增加加密强度 [cite: 382]。}
+\label{fig:intervals}
+\end{figure}
+
+\subsection{系统优化}
+[cite_start]虽然使用 MIMO 加密可以有效防御感知攻击，但如 III-C 节所述，即使使用密钥解密也可能造成信道信息的不可逆丢失 [cite: 417][cite_start]。如图 7 所示，AP 通过通用密钥分发机制 [48] 将加密矩阵 $\Psi$ 分发给 Bob，但无论使用哪种机制，对通信质量和感知任务的影响都将存在 [cite: 418][cite_start]。为了平衡系统的安全性和通信质量，我们在此提出一个多目标优化框架，在保护合法用户 Bob 的通信质量和感知精度的前提下，防御 Eve 的非法窃听 [cite: 419]。
+
+\begin{figure}[htbp]
+\centering
+% 图片占位符：图 7
+\fbox{\parbox{0.9\linewidth}{在此处插入 Figure 7 (密钥分发策略)}}
+[cite_start]\caption{WiShield 使用的密钥分发策略，Eve 获得混淆的 CSI [cite: 416]。}
+\label{fig:key_distribution}
+\end{figure}
+
+[cite_start]对于标准的 Wi-Fi 系统，AP 通过 Bob 的标准反馈 [49] 获取其 CSI，WiShield 需要在向 Bob 传递密钥的同时混淆 CSI [cite: 420][cite_start]。因此，优化框架需要整合多个目标来实现 [cite: 421][cite_start]。在这个优化框架中，主要有合法的感知用户 $Bob^{S}$、合法的通信用户 $Bob^{C}$ 和攻击者 Eve [cite: 422]。我们使用加密矩阵 $\Psi$ 作为变量来构建多目标优化模型：
+\begin{equation}
+\max_{\Psi} [\eta_{C}^{Bob}, \eta_{SD}^{Bob}, -\eta_{SD}^{Eve}]
+\end{equation}
+[cite_start]其中 $\eta_{C}^{Bob}$ 代表合法通信用户 $Bob^{C}$ 的通信 SNR [cite: 426][cite_start]。$-\eta_{SD}^{Eve}$ 和 $\eta_{SD}^{Bob}$ 分别代表攻击者 Eve 和合法感知用户 $Bob^{S}$ 的 SDNR [cite: 427]。为了实现优化，公式 (12) 还需要满足两个约束。首先，总功率需要满足：
+\begin{equation}
+s.t. ||\Psi||_{2}^{2}\le MQ^{Tx}
+\end{equation}
+其次，Bob 和 $Bob^{S}$ 的性能需要满足：
+\begin{equation}
+\eta_{C}^{Bob}\ge\epsilon_{C}, \eta_{SD}^{Bob}\ge\epsilon_{SD}
+\end{equation}
+其中 $\epsilon_{C}$ 和 $\epsilon_{SD}$ 代表下界。根据 SNR 的定义，$\eta_{C}^{Bob}$ 可以表示为：
+\begin{equation}
+\eta_{C}^{Bob}=||\hat{H}||_{2}^{2}/\sigma^{2}
+\end{equation}
+[cite_start]基于公式 (10)，我们可以将 $\eta_{SD}^{Bob}$ 稍加修改表示为 [cite: 435]：
+\begin{equation}
+\eta_{SD}^{Bob}=\frac{1}{Q^{Tx}M}\frac{||\tilde{H}^{D}||_{2}}{||\Psi_{q}^{-1}\sigma||_{2}^{2}+||\tilde{H}^{S}||_{2}^{2}+\sigma^{2}}
+\end{equation}
+[cite_start]其中 $\Psi^{-1}$ 是 $\Psi$ 的倒数，$\tilde{H}^{S}$ 和 $\tilde{H}^{D}$ 分别是解密后与 Bob 相关的静态和动态信道反射信息 [cite: 438][cite_start]。值得注意的是，$||\Psi_{q}^{-1}\sigma||_{2}^{2}$ 代表解密后的残留失真 [cite: 439][cite_start]。我们用一个简单的实验来演示不同的加密矩阵如何导致信号失真 [cite: 440][cite_start]。如图 8 所示，图 8(a) 是原始 CSI 信号，图 8(b)-8(d) 代表不同加密矩阵解密的信号 [cite: 441][cite_start]。与原始信号相比，不同的 $\Psi$ 会导致不同程度的信号失真 [cite: 442][cite_start]。因此，我们需要优化加密矩阵 $\Psi$，以便在加密强度、感知精度和通信质量之间找到最佳平衡点 [cite: 443]。我们使用一组权重来表达这组关系：
+\begin{equation}
+\max_{\omega} \omega_{1}\eta_{C}^{Bob}+\omega_{2}\eta_{SD}^{Bob}-\omega_{3}\eta_{SD}^{Eve}
+\end{equation}
+[cite_start]其中 $\sum_{i}\omega_{i}=1$ 且 $\omega_{i}\in[0,1]$。为了获得公式 (17) 的最优解，我们使用 ADMM [50] 来获得该非线性非凸优化的局部最优解 [cite: 448]。
+
+[cite_start]为了验证我们设计的多目标优化框架的有效性，我们随机生成了 200 个 $\Psi$ 并将其作为初始解 [cite: 449][cite_start]。我们使用恢复前后 CSI 的相关性作为衡量指标 [cite: 450][cite_start]。如图 9(a) 所示，优化后，Eve 获得的 CSI 具有更强的加密性 [cite: 451][cite_start]。相反，图 9(b) 显示，优化后，Bobs 获得了更接近原始 CSI 的信号 [cite: 452][cite_start]。最后，我们使用误码率 (Bit Error Rate, BER) 来表示通信质量 [cite: 453][cite_start]。图 9(c) 中的结果表明，与随机加密相比，优化策略带来了更低的 BER [cite: 454][cite_start]。这些结果表明，WiShield 使用的多目标优化策略可以在加密强度、感知精度和通信质量之间实现良好的平衡 [cite: 455]。
+
+\subsection{CSI 加密与恢复}
+[cite_start]为了在防御非法攻击者的隐私攻击时保留合法用户的感知能力，我们设计了一个动态神经网络用于 CSI 解密 [cite: 457][cite_start]。然而，我们在设计网络时仍面临两个问题 [cite: 458][cite_start]。首先，可能有多个合法的感知用户，但每个用户的加密方法可能是随机的，因此每个合法用户可能对应一个特定的解密密钥 [cite: 459][cite_start]。其次，解密的 CSI 可能会失真，这可能导致细粒度感知任务和定位任务的精度发生灾难性下降 [cite: 460][cite_start]。因此，我们需要优化解密的 CSI，以确保其能够以高精度执行感知任务 [cite: 461]。
+
+[cite_start]WiShield 使用的神经网络框架主要由两个主要部分组成：i) 一个可以解密加密 CSI 的模型，以及 ii) 一个用于恢复细粒度 CSI 的神经网络 [cite: 462, 524][cite_start]。我们首先介绍 CSI 解密模型，如图 10 所示，我们使用 $\tilde{H}$ 表示作为模型输出的恢复 CSI [cite: 525][cite_start]。模型的输入是加密 CSI $\hat{H}$ 和密钥 [cite: 526][cite_start]。在模型中，AP 通过正常的加密哈希函数 [51] 与 Bobs 安全地共享密钥 [cite: 527][cite_start]。值得注意的是，模型中可能有多个合法用户，因此模型需要能够自适应地将相应的密钥分发给由不同 $\Psi$ 生成的加密 CSI [cite: 528][cite_start]。为了解决这个问题，我们借鉴了键控动态神经网络 (Keyed Dynamic Neural Network, KDNN) [52]，KDNN 可以通过动态键控机制根据输入数据的不同条件自适应调整网络结构和参数，使网络更加灵活 [cite: 529][cite_start]。这种灵活性使得 KDNN 在处理各种类型的数据和任务时表现良好 [cite: 530]。
+
+[cite_start]如图 10 所示，我们使用集合 $[\varphi_{1},\varphi_{1},...]$ 提供额外信息来控制门控 [cite: 531][cite_start]。利用并行思想，每个密钥 $\varphi_{n}$ 作为一个单独的子模块，并在处理加密 CSI 输入时切换到相应的版本 [cite: 532][cite_start]。具体的神经网络结构如图 10 所示，包括编码器和解码器 [cite: 533]。
+
+[cite_start]\textbf{编码器：}编码器的目的是从加密 CSI $\hat{H}$ 中解密并恢复主矩阵 [cite: 535][cite_start]。首先，将加密 CSI $\hat{H}$ 和 $\Psi$ 拼接并发送到全连接层 [cite: 535][cite_start]。然后我们使用两层长短期记忆 (LSTM) 网络 [53] 来生成连续的一维序列 [cite: 536][cite_start]。LSTM 的 dropout 概率设置为 0.5，隐藏层大小设置为 256。最后，我们将 LSTM 的输出输入到全连接层，并将结果输入到解码器 [cite: 537]。
+
+[cite_start]\textbf{解码器：}解码器的目的是从编码器的输出中恢复原始 CSI 波形 [cite: 538][cite_start]。解码器由一个全连接层组成，随后是一个隐藏层大小为 256 和 5、dropout 概率为 0.5 的双向 LSTM [54] [cite: 539][cite_start]。最终输出被发送到全连接层和卷积层以输出恢复的 CSI $\tilde{H}$ [cite: 540][cite_start]。在图 11 中，我们展示了对应于手势动作的不同 CSI 输入的特征图 [cite: 540][cite_start]。可以发现，加密的 CSI 获得了与原始 CSI 非常不同的特征图，但恢复的 CSI 几乎接近原始 CSI [cite: 541]。
+
+\begin{figure}[htbp]
+\centering
+% 图片占位符：图 10
+\fbox{\parbox{0.9\linewidth}{在此处插入 Figure 10 (WiShield 神经网络结构)}}
+[cite_start]\caption{WiShield 的神经网络结构 [cite: 523]。}
+\label{fig:network_structure}
+\end{figure}
+
+\subsection{参数估计}
+[cite_start]我们将 CSI 多参数估计问题表述为最大似然估计 (MLE) [55] 问题 [cite: 543][cite_start]。我们使用 $\theta_{l}=(\alpha_{l},\tau_{l},\phi_{l},f_{D_{l}})$ 来表示第 $l$ 条路径的信号参数 [cite: 544][cite_start]。其中 $\alpha_{l}$, $\tau_{l}$, $\phi_{l}$ 和 $f_{D_{l}}$ 分别表示衰减、ToF、AoA 和 DFS [cite: 545][cite_start]。给定解密的 CSI 向量 $h_{m}$，我们将 $\Theta=(\theta_{l})_{l=1}^{L}$ 表示为多维多径信号参数的 MLE [cite: 546][cite_start]。$\Theta$ 的对数似然函数可以表示为 [cite: 547]：
+\begin{equation}
+\Lambda(\Theta;h)=-\sum_{m}|h(m)-\sum_{l=1}^{L}P_{l}(m;\theta_{l})|^{2}
+\end{equation}
+[cite_start]其中 $P_{l}$ 是第 $l$ 条路径的信号，则 $\Theta$ 的 MLE 最大化解表示为 [cite: 585, 586]：
+\begin{equation}
+\hat{\Theta}_{ML}=\arg\max_{\Theta}\{\Lambda(\Theta;h)\}
+\end{equation}
+[cite_start]不幸的是，该函数是非线性的，这意味着没有闭式解 [cite: 587][cite_start]。此外，$\Theta$（即 $4L$）的维度很高，当 $L$ 很大时，直接搜索 $\hat{\Theta}_{ML}$ 非常困难 [cite: 588][cite_start]。为了获得该函数的解，我们需要减小整体搜索空间，因此我们应用空间交替广义期望最大化 (SAGE) [56] 算法 [cite: 589][cite_start]。算法的每次迭代只需要重新估计一部分分量，其他分量的估计结果可以保持不变 [cite: 590][cite_start]。因此我们可以将 $\Theta$ 的估计拆分为多个单个参数的估计 [cite: 591][cite_start]。具体来说，我们需要依次优化每条路径的参数 [cite: 592][cite_start]。对于第 $l$ 条路径，我们首先分解 CSI，然后计算第 $l$ 条路径的信号 $\hat{P}_{l}$ [cite: 593]：
+\begin{equation}
+\hat{P}_{l}(m;\hat{\Theta}')=P_{l}(m;\hat{\theta}_{l}')+\beta_{l}(h_{m}-\sum_{l'=1}^{L}P_{l}(m;\hat{\theta}_{l'}'))
+\end{equation}
+[cite_start]其中 $\hat{\Theta}'$ 是上次迭代后获得的参数，$\beta_{l}$ 是控制算法收敛速度的系数，默认设置为 1 [cite: 596][cite_start]。具体的参数估计步骤如下 [cite: 614, 615]：
+\begin{equation}
+\hat{\tau}_{l}''=\arg\max_{\tau}\{|z(\tau,\hat{\phi}_{l}',\hat{f}_{D_{l}}';\hat{P}_{l}(m;\hat{\Theta}'))|\}
+\end{equation}
+\begin{equation}
+\hat{\phi}_{l}''=\arg\max_{\phi}\{|z(\hat{\tau}_{l}'',\phi,\hat{f}_{D_{l}}';\hat{P}_{l}(m;\hat{\Theta}'))|\}
+\end{equation}
+\begin{equation}
+\hat{f}_{D_{l}}''=\arg\max_{f_{D}}\{|z(\hat{\tau}_{l}'',\hat{\phi}_{l}'',f_{D};\hat{P}_{l}(m;\hat{\Theta}'))|\}
+\end{equation}
+\begin{equation}
+\hat{\alpha}_{l}''=\frac{z(\hat{\tau}_{l}'',\hat{\phi}_{l}'',\hat{f}_{D_{l}}'';\hat{P}_{l}(m;\hat{\Theta}'))}{TFA}
+\end{equation}
+[cite_start]其中 [cite: 617]：
+\begin{equation}
+z(\tau,\phi,f_{D};P_{l})=\sum_{m}e^{2\pi\Delta f_{j}\tau_{l}}e^{2\pi f_{c}\Delta s_{k}\cdot\phi_{l}}e^{-2\pi f_{D_{l}}\Delta t_{i}}P_{l}(m)
+\end{equation}
+[cite_start]$\alpha_{l}$ 的 MLE 可以导出为 $\tau_{l}, \phi_{l}$ 和 $f_{D_{l}}$ 的函数形式，因此在每次迭代结束时计算 [cite: 582, 583]。
+
+\section{实现与设置}
+[cite_start]在本节中，我们介绍 WiShield 的硬件实现，然后是实验设置和指标 [cite: 598]。
+
+[cite_start]\textbf{系统实现：}如图 12(a) 所示，我们使用广泛采用的 USRP X310 [57] 进行 Wi-Fi 感知来构建我们的 WiShield 原型 [cite: 607][cite_start]。USRP X310 工作在 6GHz，200MHz 带宽，并以默认速率发送 1000 个数据包 [cite: 608][cite_start]。Bob 和 Eve 分别配置了 4 根天线，AP 配置了 4 根天线 [cite: 609][cite_start]。所有 USRP 节点通过以太网交换机连接到 PC 服务器，服务器配置为 Intel Core i9-12900K CPU，32GB 内存和 RTX 2080 显卡 [cite: 610][cite_start]。我们在 PC 服务器上实现了 WiShield 的软件框架和 Python 3.7，神经模型建立在 PyTorch 1.11.0 上 [cite: 611]。
+
+[cite_start]\textbf{实验设置：}我们招募了 20 名受试者（13 名女性和 7 名男性）参与数据收集 [cite: 612][cite_start]。所有受试者都被要求观看演示视频，以规范每位志愿者的手势和轨迹演示行为 [cite: 613][cite_start]。我们在一个 55 平方米的大型会议室中执行了 10 种常见手势（即推拉、滑动、拍手、画圈、方形、Z字形、OK、捏合、交叉和交换）[cite: 619][cite_start]。为了便于说明，我们将这些手势缩写为 G1, G2, G3, G4, G5, G6, G7, G8, G9 和 G10 [cite: 620][cite_start]。我们收集了每位志愿者的加密和未加密数据，其中加密数据为 16000 个样本（10 手势 $\times$ 80 实例 $\times$ 20 受试者），未加密数据为 10000 个样本（10 手势 $\times$ 50 实例 $\times$ 20 受试者）[cite: 621][cite_start]。然后我们使用相同的原则收集了每位受试者长达 20 分钟的呼吸数据，并将呼吸率分为三档 [cite: 622, 643][cite_start]。对于轨迹跟踪，每位受试者被要求按照指示记录两条轨迹（圆形和 Z 形）和四条随机路线的数据，每条轨迹执行 20 次 [cite: 644][cite_start]。我们的数据收集过程严格遵守我们机构的 IRB 要求 [cite: 645]。
+
+[cite_start]\textbf{指标：}WiShield 使用两个常用指标来量化感知和通信性能，即准确率 (Accuracy) 和误码率 (Bit Error Rate, BER) [cite: 646][cite_start]。其中准确率代表正确识别手势的比例，误码率代表错误解码比特的比例 [cite: 647][cite_start]。对于呼吸监测，我们使用每分钟呼吸数估计误差 (bpm) 来评估呼吸检测误差 [cite: 648][cite_start]。最后，我们使用定位误差来评估轨迹跟踪任务的误差 [cite: 649]。
+
+\section{评估}
+[cite_start]在本节中，我们首先评估随机加密时间策略和模型鲁棒性 [cite: 651][cite_start]。然后我们全面评估 WiShield 对抗感知攻击的防御能力 [cite: 652]。
+
+\subsection{基准研究}
+[cite_start]\textbf{1) 加密时间随机化：}在 IV-C 节中，我们提出了一种利用加密时间随机化来提高加密强度的策略 [cite: 654][cite_start]。为了验证加密时间随机化的有效性，以手势识别任务为例，我们测试了 20 名受试者在使用和不使用加密时间随机化（仅使用 $\Psi$）情况下的手势识别准确率 [cite: 655][cite_start]。图 13 所示的结果表明，与不使用相比，采用随机时间加密优化会导致手势识别任务的准确率进一步降低 [cite: 668][cite_start]。这一结果表明，随机加密时间策略增强了 WiShield 的加密强度 [cite: 669]。
+
+[cite_start]\textbf{2) 模型鲁棒性：}为了验证 WiShield 神经网络的鲁棒性，我们测试了神经网络在动态信道条件下恢复 CSI 的能力 [cite: 670][cite_start]。具体来说，我们计算了加密和解密（LoS 和 NLoS）CSI 与原始 CSI 之间的相似度 [cite: 671][cite_start]。如图 14 所示，解密后的平均相关性在 98\% 以上，这也说明系统后的 CSI 可以准确地执行感知应用 [cite: 672]。
+
+\subsection{WiShield 性能}
+[cite_start]\textbf{1) 防御能力：}我们以三种常见的 Wi-Fi 感知应用为例来评估 WiShield 对抗恶意窃听的防御能力 [cite: 674][cite_start]。我们首先进行了手势识别实验，要求 20 名受试者在距离 AP 0.5 米处做出不同手势，并将 Eve 固定在距离 AP 2 米的位置 [cite: 675][cite_start]。我们设置了两组实验，一组在 Eve 和 AP 之间没有障碍物，另一组添加了障碍物形成 NLoS 类型 [cite: 676][cite_start]。如图 15(a) 所示，加密后，LoS 条件下的平均手势窃听准确率低于 16\% [cite: 677][cite_start]。与未加密窃听相比，WiShield 成功将窃听准确率降低了 80\% 以上 [cite: 678][cite_start]。此外，NLoS 条件下的实验也有类似的趋势，除了当有障碍物阻挡时，手势识别准确率会略有下降 [cite: 679][cite_start]。然后我们评估了 WiShield 对抗体征检测的防御能力 [cite: 680][cite_start]。我们要求受试者在距离 AP 0.5 米处进行呼吸实验 [cite: 681][cite_start]。我们也收集了 LoS 和 NLoS 条件下的数据 [cite: 682][cite_start]。如图 15(b) 所示，加密后，呼吸检测的误差显着增加，以至于不再具有参考价值 [cite: 683][cite_start]。这些结果表明 WiShield 可以有效防止窃听敏感动作信息 [cite: 684][cite_start]。最后，我们评估了 WiShield 抵抗非法位置窃听的能力，在实验中，受试者被要求沿着规定路径行走 [cite: 685][cite_start]。如图 15(c) 所示，在未加密条件下，定位误差约为 0.4 米 [cite: 686][cite_start]。加密后，定位误差上升到 2.8 米以上 [cite: 687][cite_start]。这种定位误差在 60 平方米的室内是不可接受的 [cite: 688][cite_start]。这一结果在 LoS 和 NLoS 条件下是一致的，表明 WiShield 在防止非法位置窃听方面是有效的 [cite: 689]。
+
+[cite_start]\textbf{2) 不同设备位置：}我们进一步研究了 Eve 与 AP 之间的距离对结果的影响 [cite: 690][cite_start]。我们将 Eve 放置在距离 AP 2m-6m 之间的八个位置，步长设置为 0.5m [cite: 691][cite_start]。如图 16(a) 所示，手势识别的性能随着距离的增加而下降 [cite: 692][cite_start]。类似的结果也显示在图 16(b) 和图 16(c) 中 [cite: 693][cite_start]。呼吸误差率和定位误差也会随着距离的增加而增加 [cite: 694][cite_start]。这些结果证实，Eve 的窃听性能确实会随着距离的增加而恶化 [cite: 695]。
+
+[cite_start]\textbf{3) 加密对感知任务的影响：}除了有效抵御感知攻击外，WiShield 还需要保持合法用户的感知能力 [cite: 806][cite_start]。因此，我们在相同的实验设置下评估 CSI 解密后感知应用的性能恢复 [cite: 807][cite_start]。为了进行比较，我们考虑了两种设置：i) 使用未加密的 CSI 进行数据收集，ii) 使用模型加密和解密 CSI [cite: 808][cite_start]。图 17(a) 显示了解密前后手势识别的平均准确率 [cite: 809][cite_start]。对于六种常见手势，解密前的平均识别准确率为 92.5\%，解密后为 90.2\% [cite: 810][cite_start]。这表明解密过程确实会造成一些信息丢失，但仍能胜任手势识别任务 [cite: 811][cite_start]。接下来，我们展示 WiShield 对人体呼吸监测的恢复精度 [cite: 812][cite_start]。如图 17(b) 所示，未加密时的呼吸率估计误差约为 0.11 bpm [cite: 813][cite_start]。解密后误差略有增加，平均约为 0.13 bpm [cite: 814][cite_start]。总体而言，解密引起的失真对呼吸检测影响不大 [cite: 815][cite_start]。最后，我们研究了加密对轨迹跟踪任务的影响 [cite: 816][cite_start]。与手势识别和体征检测等活动识别任务不同，轨迹跟踪需要更细粒度的 CSI 信息，而活动识别更依赖于模型的分类能力 [cite: 817][cite_start]。我们使用了四种广泛接受的轨迹跟踪模型，即 ArrayTrack, SpotFi, mD-Track 和 Widar 2.0 进行实验 [cite: 818][cite_start]。实验结果如图 17(c) 所示 [cite: 819][cite_start]。未加密时，四种方法的定位精度在 0.42m 到 0.49m 左右，加密后定位精度增加到 3.01m 到 2.79m [cite: 820, 831][cite_start]。这种误差是因为对于轨迹跟踪任务，CSI 加密过程中产生的误差会随着信息失真逐渐累积 [cite: 832][cite_start]。目前看来，加密过程确实对定位精度有影响 [cite: 833][cite_start]。我们将继续在未来的工作中解决这个问题 [cite: 834]。
+
+[cite_start]\textbf{4) 对 BER 的影响：}在本节中，我们研究加密对通信质量的影响 [cite: 838][cite_start]。我们使用有效载荷的误码率作为指标 [cite: 839][cite_start]。我们以 30 分钟的通信时间为例，使用两种常见的调制方式（QAM-32 和 QAM-64）作为有效载荷 [cite: 840][cite_start]。如图 18 所示，加密过程对通信性能的影响非常微弱 [cite: 841][cite_start]。无论使用哪种调制方式，误码率都足够低 [cite: 842][cite_start]。这归功于我们提出的多目标优化框架，成功实现了加密强度、感知精度和通信质量的平衡 [cite: 843]。
+
+[cite_start]\textbf{5) 与相关工作比较：}我们在相同条件下使用 4 天线系统作为基准测试了 OpenWiFi CSI Fuzzer [58] 和 WiShield [cite: 844][cite_start]。结果如图 19 所示。WiShield 在手势识别、呼吸监测和轨迹跟踪方面的加密性能优于 OpenWiFi CSI Fuzzer [cite: 845][cite_start]。这是因为我们的加密利用了 MIMO 波束成形器的控制，应用了加密密钥，其中每个元素都是 $Q_{Tx}\times M$ 的复数，具有更大的强度和灵活性 [cite: 846][cite_start]。此外，KDNN 可以捕获设备间 CSI 流的相关性，并以更复杂的方式生成密钥，也可以不断优化和改进以满足不断变化的需求 [cite: 847][cite_start]。我们还评估了 WiShield 的密钥生成算法与类似过去工作的性能比较 [cite: 848][cite_start]。如表 I 所示，得益于 KDNN 的使用，WiShield 在所有评估场景中实现了超过 70 比特/秒的密钥生成率 [cite: 849][cite_start]。此外，WiShield 的密钥生成解决方案可以扩展到类似物联网设备上的安全应用，以对抗隐蔽的射频窃听攻击 [cite: 850]。
+
+\begin{table}[htbp]
+[cite_start]\caption{WiShield 与先前工作的比较 [cite: 836]}
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+ & 密钥生成率 & 真实评估测试 \\
+\midrule
+WiShield & $>70$ bit/sec & 是 \\
+Liu et al. [59] & $40$ bit/sec & 是 \\
+Wei et al. [60] & $25$ bit/sec & 是 \\
+Thai et al. [61] & $8$ bit/sec & 否 \\
+Xu et al. [62] & $6.2$ bit/sec & 否 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\label{tab:comparison}
+\end{table}
+
+[cite_start]\textbf{6) 天线数量：}增加 AP 天线数量可以增强密钥 $\Psi$ 的多样性，从而挫败攻击者保护合法用户利益的企图 [cite: 851][cite_start]。如图 20 所示，随着 AP 天线数量的增加，WiShield 两端的性能均有所提高 [cite: 852][cite_start]。然而，当天线数量增加到 4 时，提升幅度明显减小，因此我们的实验以 4 天线为基准 [cite: 853]。
+
+[cite_start]\textbf{7) 挫败感知攻击的能力：}基于 Wi-Fi 的手势识别可以让窃听者获取密码等敏感信息，我们使用 WINK [31] 和 WindTalker [19] 作为基线方法 [cite: 854][cite_start]。其中，WINK 是一种无需训练的密码推理策略，WindTalker 是一种需要训练的密码推理和数字键分类策略 [cite: 855][cite_start]。如图 21(a) 所示，加密后 WindTalker 的单键分类准确率下降了 60\% [cite: 856][cite_start]。此外，图 21(b) 显示了加密前后 WINK 和 WindTalker 的密码推理准确率 [cite: 857][cite_start]。可以看出，加密极大地影响了这类基于 Wi-Fi CSI 的隐私攻击策略 [cite: 858, 859]。
+
+[cite_start]\textbf{8) 系统开销：}我们使用广泛采用的 USRP X310 对 WiShield 进行了原型设计，该设备工作在 6 GHz，200MHz 带宽，并以默认速率传输数据包（1000 个数据包）[cite: 860][cite_start]。以 AP 的 4 根天线向合法的感知用户发送 2s（2000 个数据包）流量为例 [cite: 861][cite_start]。加密矩阵包含 $4\times2000$ 个复数，每个数据包约 4 字节，因此总数据量为 32000 字节 [cite: 862][cite_start]。幸运的是，WiShield 只需要解密密钥来激活特定的编码器来处理加密的 CSI，而解密密钥的传输量只需要 2048 位的解密密钥，这远小于原始数据量 [cite: 863][cite_start]。而且只需要每隔几周定期更新一次 [cite: 864][cite_start]。我们在不同用户场景下测试了每次解密操作所需的时间 [cite: 865][cite_start]。当用户数量超过 4 个时，解密时间不超过 0.82 ms，当用户数量为 8 个时，解密时间保持在 1.1 ms 以内 [cite: 866][cite_start]。在我们的原型机上，每次与 $\Psi$ 相关的解密操作耗时 0.78 ms，因此 2s 数据流的额外时间成本为 $2000\times0.78=1560$ ms [cite: 867]。
+
+\section{讨论}
+[cite_start]在本节中，我们将讨论 WiShield 的安全性、算法效率和应用场景限制 [cite: 869]。
+
+[cite_start]\textbf{安全性分析：}对于攻击者 Eve，她不知道密钥 $\Psi$ 中包含的复数值参数（数量为 $Q_{Tx}\times M)$，她只能通过不同天线的观测来破解 $\Psi$ [cite: 870][cite_start]。然而，根据 $\hat{H}=H\Psi$，Eve 每增加一根新天线，就会引入与 $Q_{Tx}$ 相关的新未知参数 [cite: 871][cite_start]。因此，Eve 无法通过使用更多天线获得分集增益 [cite: 872][cite_start]。其次，WiShield 使用加扰模式序列，并利用序列长度作为加密密钥长度，这与传统的正交盲方案形成鲜明对比 [cite: 873][cite_start]。与后者相比，加密密钥受到限制以保持与合法用户的正交信道以屏蔽攻击者，WiShield 允许合法用户从整个空间中选择加密密钥 [cite: 874][cite_start]。此外，WiShield 的加密密钥通常包含大约甚至超过 1,000 个混洗模式，并在毫秒级进行模式间的快速切换 [cite: 875][cite_start]。因此，WiShield 的加密方法比现有方法更加鲁棒 [cite: 876][cite_start]。此外，我们还考虑了在没有感知活动的时期泄露密钥的可能性 [cite: 877][cite_start]。根据公式 (10)，静态周期可以被视为方程中的 $||H^{S}||_{2}^{2}$，属于静态分量 [cite: 878][cite_start]。由于该分量在统计上与感知活动无关，这一时期的 CSI 是否加密并不重要，因此不会影响 WiShield 在没有感知活动期间的保护强度 [cite: 838]。
+
+[cite_start]\textbf{训练开销：}WiShield 只需要在系统初始化阶段为每个注册的合法用户执行一次 KDNN 训练过程 [cite: 939][cite_start]。具体来说，在用户注册阶段，我们根据加密混淆函数以及该设备与 AP 端口的 CSI 数据流，为每个合法用户设备训练一个唯一的 KDNN [cite: 940][cite_start]。然后，我们通过安全通道将训练好的 KDNN 发送给相应的合法设备 [cite: 941][cite_start]。由于混淆函数是严格保密的，WiShield 确保窃听者无法通过重建的 CSI 数据流通过重构攻击推断出密钥 [cite: 942][cite_start]。KDNN 的训练和密钥分发仅在系统初始化期间执行一次，不需要在每次执行后续感知应用时都执行 [cite: 943, 944][cite_start]。虽然 WiShield 使用了神经网络，但对于当今常用的物联网设备（手机或平板电脑）的计算能力来说，这种训练的计算负荷仍然是轻量级的 [cite: 945][cite_start]。此外，如有必要，我们可以将网络初始化过程卸载到服务器上 [cite: 947][cite_start]。在这种条件下，每当需要感知应用时，用户设备只需要执行一次 KDNN 前向计算和简单的量化操作即可获得密钥 [cite: 948][cite_start]。因此，WiShield 对于常用的室内 Wi-Fi 设备来说是一个可行的隐私保护解决方案 [cite: 949]。
+
+[cite_start]\textbf{算法效率：}虽然 WiShield 的加密和保护可以提高 Wi-Fi 网络的安全性和可靠性，但实施加密和保护机制往往需要额外的复杂性和开发工作 [cite: 950][cite_start]。这包括密钥管理、认证过程、加密算法选择和实现等。复杂的实现可能会增加系统设计和维护的难度，对于移动设备等资源受限的环境，加密和保护机制可能会增加设备的功耗 [cite: 951][cite_start]。特别是当使用加密算法进行数据加密和解密时，可能会消耗更多的电力资源 [cite: 952][cite_start]。为了解决这个问题，我们着手设计一个即插即用的系统，而不是一刀切的加密方法 [cite: 953][cite_start]。对于安全级别较低的应用场景，我们可以自适应调整加密强度以降低系统功耗 [cite: 954]。
+
+[cite_start]\textbf{应用场景：}在 AR/VR 场景中，需要根据场景需求激活 WiShield [cite: 955][cite_start]。例如，在安全性要求较低、需要低延迟的手势识别中，不需要加密 [cite: 956][cite_start]。但在涉及身份验证或密码输入的活动中，隐私至关重要，WiShield 可以有效保护用户隐私 [cite: 957][cite_start]。在需要精确定位的应用中，如虚拟环境中的实时交互，加密可能不合适，因为解密后可能会出现时间延迟和信息失真，这可能会阻碍可行性 [cite: 958][cite_start]。同样，对于无人机导航，如果用于军事防御等敏感活动，WiShield 可以很好地保护敏感轨迹 [cite: 967][cite_start]。但是，对于一般民用设备，加密可能会牺牲一定的效率 [cite: 968][cite_start]。在元宇宙中，WiShield 的影响因具体场景和应用而异 [cite: 969][cite_start]。用户通常期望与虚拟对象进行精确交互，例如物体操纵 [cite: 970][cite_start]。因此，加密感知可能更适合需要高交互精度的应用 [cite: 971][cite_start]。然而，对于高度隐私的交互，加密是必须的 [cite: 972]。
+
+\section{结论}
+[cite_start]在本文中，我们提出了 WiShield，这是一个专门为无处不在的 Wi-Fi 感知攻击设计的防御系统 [cite: 987][cite_start]。WiShield 创新性地利用精心设计的密钥分发策略，通过 MIMO 加密实现加密强度、感知精度和通信质量之间的平衡 [cite: 988][cite_start]。与过去的方法不同，WiShield 不需要使用昂贵的额外设备或复杂的系统修改 [cite: 989][cite_start]。我们通过大量实验验证了 WiShield 的有效性，我们提出的系统可以很好地保护合法的感知用户 [cite: 990][cite_start]。我们相信 WiShield 的提出提高了 Wi-Fi 感知领域的隐私保护标准 [cite: 991]。
+
+\bibliographystyle{IEEEtran}
+% 参考文献部分保留原文引用格式，此处省略具体条目以节省篇幅，实际应包含所有引用文献
+\begin{thebibliography}{00}
+\bibitem{b1} Y. Shu, C. Bo, G. Shen, C. Zhao, L. Li, and F. Zhao, "Magicol: Indoor localization using pervasive magnetic field and opportunistic wifi sensing," IEEE Journal on Selected Areas in Communications, vol. 33, no. [cite_start]7, pp. 1443-1457, 2015. [cite: 993, 994]
+% ... (其他参考文献请根据原文补充) ...
+\end{thebibliography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Jingyang Hu}
+[cite_start]目前是湖南大学计算机科学与电子工程学院的博士生 [cite: 1105][cite_start]。2022 年至 2023 年，他在新加坡南洋理工大学 (NTU) 计算机科学与工程学院担任联合培养博士生 [cite: 1106, 1107][cite_start]。他在 ACM Ubicomp, ACM CCS, IEEE INFOCOM, IEEE ICDCS, IEEE TMC, IEEE JSAC, IEEE TITS, IEEE IoT-J 等发表过论文 [cite: 1108][cite_start]。他的研究兴趣包括移动和普适计算、物联网和机器学习 [cite: 1108]。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Hongbo Jiang}
+[cite_start]现任湖南大学计算机科学与电子工程学院正教授 [cite: 1109][cite_start]。曾任华中科技大学教授。2008 年获得凯斯西储大学博士学位 [cite: 1110, 1111][cite_start]。他一直担任 IEEE/ACM TON, IEEE TMC, ACM TOSN, IEEE TNSE, IEEE TITS, IEEE IoT-J 等期刊的编委。他还受邀担任 IEEE INFOCOM, ACM WWW, ACM/IEEE MobiHoc, IEEE ICDCS, IEEE ICNP 等会议的 TPC 成员 [cite: 1111, 1112][cite_start]。他是 IET (The Institution of Engineering and Technology) 当选 Fellow, BCS (The British Computer Society) Fellow, ACM 高级会员, IEEE 高级会员, 以及 IFIP TC6 WG6.2 正式成员 [cite: 1112, 1113][cite_start]。目前他的研究重点是计算机网络，特别是无线网络、物联网数据科学和移动计算 [cite: 1114]。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Siyu Chen}
+[cite_start]2021 年获得中国长沙湖南大学通信工程学士学位，目前正在湖南大学计算机科学与电子工程学院攻读博士学位 [cite: 1115, 1116][cite_start]。他在 IEEE INFOCOM, IEEE IoT-J, IEEE TMC 和 IEEE JSAC 发表过论文 [cite: 1117][cite_start]。他的研究兴趣在于无线感知和物联网安全领域 [cite: 1118]。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Qibo Zhang}
+[cite_start]2018 年在南京航空航天大学电子与工程学院获得学士学位，2021 年在湖南大学计算机科学与电子工程学院获得硕士学位。目前正在湖南大学计算机科学与电子工程学院攻读博士学位 [cite: 1126][cite_start]。他的研究兴趣包括电磁侧信道和无线感知 [cite: 1127]。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Zhu Xiao}
+(M'12-SM'19) [cite_start]分别于 2007 年和 2009 年获得中国西安电子科技大学通信与信息系统硕士和博士学位 [cite: 1128][cite_start]。2010 年至 2012 年，他在英国贝德福德大学计算机科学与技术系担任研究员。现任中国湖南大学计算机科学与电子工程学院正教授 [cite: 1129][cite_start]。他的研究兴趣包括无线定位、车联网和智能交通系统 [cite: 1130][cite_start]。他是 IEEE 高级会员，并担任 IEEE Transactions on Intelligent Transportation Systems 的副编辑 [cite: 1131]。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Jiangchuan Liu}
+(S'01-M'03-SM'08-F'17) [cite_start]是加拿大不列颠哥伦比亚省西蒙弗雷泽大学计算科学学院的大学教授 [cite: 1132]。他是加拿大工程院院士、IEEE Fellow 和 NSERC E.W.R. [cite_start]Steacie 纪念 Fellow [cite: 1133][cite_start]。他曾任清华大学 EMC 讲席教授 (2013-2016) [cite: 1134][cite_start]。过去他曾担任香港中文大学助理教授和微软亚洲研究院研究员 [cite: 1135][cite_start]。他于 1999 年获得中国北京清华大学工学学士学位（优等生），并于 2003 年获得香港科技大学计算机科学博士学位 [cite: 1136][cite_start]。他是首届 IEEE INFOCOM 时间考验论文奖 (2015)、ACM SIGMM TOMCCAP Nicolas D. Georganas 最佳论文奖 (2013) 和 ACM Multimedia 最佳论文奖 (2012) 的共同获得者 [cite: 1137][cite_start]。他的研究兴趣包括多媒体系统和网络、云和边缘计算、社交网络、在线游戏和物联网/RFID/反向散射 [cite: 1138][cite_start]。他曾担任 IEEE/ACM Transactions on Networking, IEEE Transactions on Big Data, IEEE Transactions on Multimedia, IEEE Communications Surveys and Tutorials, 以及 IEEE Internet of Things Journal 的编委 [cite: 1139][cite_start]。他是 IEEE Transactions on Mobile Computing 的指导委员会成员，也是 IEEE/ACM IWQOS (2015-2017) 的指导委员会主席 [cite: 1140][cite_start]。他是 IEEE INFOCOM 2021 的 TPC 联合主席 [cite: 1141]。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Daibo Liu}
+[cite_start]2018 年获得中国成都电子科技大学计算机科学与工程博士学位。2014-2016 年任清华大学软件学院访问研究员，2016-2017 年任威斯康星大学麦迪逊分校电气与计算机工程系访问研究员 [cite: 1142][cite_start]。现任中国长沙湖南大学计算机科学与电子工程学院助理教授 [cite: 1143][cite_start]。他的研究兴趣涵盖低功耗无线网络、移动和普适计算以及系统安全等广泛领域 [cite: 1144, 1145][cite_start]。他是 IEEE 和 ACM 的成员 [cite: 1146]。
+\end{IEEEbiography}
+
+\begin{IEEEbiography}[{\includegraphics[width=1in,height=1.25in,clip,keepaspectratio]{placeholder.png}}]{Bo Li}
+[cite_start]获得北京清华大学计算机科学学士学位（最优等）和马萨诸塞大学阿默斯特分校电气与计算机工程博士学位 [cite: 1147][cite_start]。现任香港科技大学计算机科学与工程系讲席教授 [cite: 1148][cite_start]。2010 年至 2016 年，他担任上海交通大学长江访问讲席教授，并担任中国领先的 CDN 提供商蓝汛通信 (ChinaCache Corporation) 的首席技术顾问 [cite: 1149, 1150][cite_start]。1999 年至 2006 年任微软亚洲研究院兼职研究员，2007 年至 2008 年任微软先进技术中心兼职研究员。他在多媒体通信和互联网视频广播方面做出了开创性贡献，特别是 Coolstreaming 系统，被誉为世界上第一个大规模点对点直播视频流系统 [cite: 1151][cite_start]。它引起了工业界和学术界的极大关注。他曾担任二十多种 IEEE 和 ACM 期刊和杂志的编辑或客座编辑 [cite: 1152][cite_start]。他曾担任 IEEE INFOCOM 2004 的联合 TPC 主席。因其贡献，他获得了 IEEE INFOCOM 2015 的时间考验最佳论文奖 [cite: 1153]。
+\end{IEEEbiography}
+
+\end{CJK*}
+\end{document}

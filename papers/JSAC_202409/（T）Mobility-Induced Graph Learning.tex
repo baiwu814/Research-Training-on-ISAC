@@ -1,0 +1,592 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{url}
+
+% 设置中文支持 (如果使用 XeLaTeX 编译)
+\usepackage{xeCJK}
+\setCJKmainfont{SimSun} % 或者设置为你系统中有的字体，如 FandolSong
+
+\begin{document}
+
+% 顶部通知信息
+\markboth{This article has been accepted for publication in IEEE Journal on Selected Areas in Communications. DOI 10.1109/JSAC.2024.3413968}{}
+
+\title{Mobility-Induced Graph Learning for WiFi Positioning\\
+\Large 基于移动性诱导图学习的 WiFi 定位}
+
+\author{Kyuwon Han, Seung Min Yu, Seong-Lyun Kim, and Seung-Woo Ko, \IEEEmembership{Senior Member, IEEE}
+\thanks{This work was supported in part by the National Research Foundation of Korea (NRF) funded by the Ministry of Science and ICT (MSIT) (No. 2022R1F1A1072911 and No. 2022R1A5A1027646), the Institute of Information \& Communications Technology Planning \& Evaluation (IITP) funded by MSIT (No. 2021-0-00347), and a grant from R\&D Program (PK2401B2) of the Korea Railroad Research Institute.}
+\thanks{K. Han is with Advanced R\&D Team, Samsung Electronics, Suwon 16677, Korea (email: kyuwon.han@samsung.com).}
+\thanks{S. M. Yu is with Innovative Transportation and Logistics Research Center, Korea Railroad Research Institute, Uiwang 16105, Korea (email: smyu@krri.re.kr).}
+\thanks{S.-L. Kim is with Dept. EEE, Yonsei University, Seoul 03722, Korea (email: slkim@ramo.yonsei.ac.kr).}
+\thanks{S.-W. Ko is with Dept. Smart Mobility Eng., Inha University, Incheon 21999, Korea (email: swko@inha.ac.kr). (Corresponding author: Seung-Woo Ko.)}
+}
+
+\maketitle
+
+\begin{abstract}
+基于智能手机的用户移动性跟踪（User Mobility Tracking）在寻找用户位置方面可能是有效的，但由于内置惯性测量单元（IMUs）的规格较低，其中不可预测的误差拒绝了其独立使用，而是要求与另一种定位技术（如 WiFi 定位）进行集成。本文旨在提出一种新颖的集成技术，该技术使用一种称为移动性诱导图学习（Mobility-INduced Graph LEarning, MINGLE）的图神经网络（GNN），该网络是基于通过捕获不同用户移动性特征而构建的两种类型的图来设计的。具体而言，将连续的测量点（MPs）视为节点，用户的常规移动模式允许我们将相邻的测量点作为边进行连接，称为时间驱动移动图（Time-driven Mobility Graph, TMG）。其次，用户在从一个位置移动到另一个位置时以恒定速度进行的相对直线转换可以通过连接每条路径上的节点来捕获，称为方向驱动移动图（Direction-driven Mobility Graph, DMG）。然后，我们可以设计基于图卷积网络（GCN）的跨图学习（Cross-graph Learning），其中针对 TMG 和 DMG 的两个不同 GCN 模型通过输入由 WiFi RTTs 创建的不同输入特征进行联合训练，同时共享它们的权重。此外，损失函数包括一个移动性正则化项（Mobility Regularization Term），使得由于用户稳定的移动速度，相邻位置估计之间的差异应该变化较小。注意到正则化项不需要地面实况位置（Ground-truth Location），MINGLE 可以在半监督（Semi-supervised）和自监督（Self-supervised）学习框架下设计。所提出的 MINGLE 的有效性通过现场实验得到了广泛验证，显示出比基准更好的定位精度，例如自监督和半监督学习情况下的平均绝对误差（MAEs）分别为 1.510 (m) 和 1.077 (m)。
+\end{abstract}
+
+\begin{IEEEkeywords}
+WiFi 定位 (WiFi positioning)，图神经网络 (Graph Neural Network)，移动性诱导图 (Mobility-induced graph)，图卷积网络 (Graph Convolution Network)，跨图学习 (Cross-graph learning)，移动性正则化项 (Mobility-regularization term)。
+\end{IEEEkeywords}
+
+\section{引言 (Introduction)}
+
+随着智能手机和无处不在的 WiFi 接入点（APs）的广泛使用，WiFi 定位已被认为是通过识别用户位置提供用户特定服务的流行解决方案 [1]。目标用户与每个 WiFi AP 之间的距离可以基于信号强度（SS）或往返时间（RTT）进行估计，从而允许我们通过多边定位（Multilateration）找到位置估计。然而，其准确性和可靠性是值得怀疑的，因为除非在用户和每个 AP 之间建立了视距（Line-of-Sight, LoS）条件，否则这些测量值可能会受到严重破坏。
+
+克服这一限制的一个可行方法是将由内置惯性测量单元（IMU）测量的用户移动性信息（Mobility Information）引入 WiFi 定位中，因为它独立于影响 SS 或 RTT 的传播条件。尽管文献中提出了各种将用户移动性集成到 WiFi 定位中的技术（将在后文中介绍），但本文旨在提出一种利用图神经网络（GNN）的新技术，称为移动性诱导图学习（MINGLE），它是基于通过捕获用户移动性固有特征而创建的图。
+
+具体而言，用户的常规移动模式，例如可通过用户智能手机的 IMU 检测到的恒定移动速度和方向，使我们能够实时生成图。节点代表用户的位置，节点之间的边根据其时间邻接性（Temporal Adjacency）或方向一致性（Direction Consistency）创建。生成的图是所提出的 MINGLE 的核心。输入特征（原始数据或预处理数据）仅在存在相应边时才传播到下一层的节点。此外，相邻节点之间的规则间距可用作设计损失函数中的正则化项，这使得在半监督和自监督学习框架下开发 MINGLE 成为可能。
+
+\subsection{相关工作 (Prior Work)}
+我们总结了文献中的相关工作，可以分为两部分：结合用户移动性的 WiFi 定位和基于 GNN 的定位。
+
+\subsubsection{结合用户移动性的 WiFi 定位}
+现代智能手机配备了各种 IMU 传感器，例如加速度计、陀螺仪和磁力计，以帮助在 GPS 拒止环境中更新用户的位置，称为行人航位推算（Pedestrian Dead Reckoning, PDR）[8]。另一方面，由于内置 IMU 的低分辨率、随时间累积的误差 [9] 以及随时间变化的握持模式 [10] 等若干实际限制，独立的 PDR 方法几乎不被考虑。这就要求集成另一种定位方法作为补救措施以克服上述限制，例如作为本文主要目标的 WiFi 定位。
+
+该领域的研究主要集中在创建一种结合 WiFi 定位和 PDR 的方法。一种经典的方法是使用卡尔曼滤波器（KF）或扩展卡尔曼滤波器（EKF），其中 WiFi 定位和 PDR 的两个不同位置估计，分别称为预测位置估计（PLE）和测量位置估计（MLE），通过加权组合以产生更可靠的估计 [11]。基于 KF 或 EKF 集成的先决条件是每个位置估计的协方差矩阵应预先给定，但这在实践中具有挑战性。
+
+已经进行了几项研究来解决这个问题。在 [12] 和 [13] 中，这些协方差矩阵通过利用深度神经网络（DNN）的能力来计算，假设 DNN 训练给定了地面实况协方差矩阵。在 [14] 中，提出了一种称为组合数据增强（Combinatorial Data Augmentation, CDA）的新技术，用于在没有地面实况的情况下更新 MLE 的协方差矩阵，使得从不同 WiFi RTT 测量子集获得的多个位置估计的空间方差被视为 MLE 的实时协方差矩阵。请注意，上述技术的设计基于 KF 提供了 PLE 和 MLE 之间的最佳融合的信念，这仅在 PLE 和 MLE 上的误差服从零均值高斯分布时才有意义。此外，KF 旨在融合一对单独的 PLE 和 MLE，这使得难以提取嵌入在先前结果中的有用信息。
+
+与上述基于 KF 的单个 PLE 和 MLE 集成不同，最近的一些研究旨在利用 MLE 和 PLE 的整个序列。在 [15] 中，通过联合优化 WiFi 非视距（NLoS）偏差、步长和初始航向方向，将上述两个序列以最小误差对齐，称为轨迹对齐（Trajectory Alignment, TA）。在 [16] 中，这被扩展为基于 DNN 的算法，其损失函数定义为两个序列之间的差异。另一方面，这两种算法在相对精确的 IMU 测量的假设下工作良好，为此需要精确的校准和预处理 [17]。
+
+\subsubsection{基于 GNN 的定位}
+GNN 是一类使用图结构提取其中领域知识的 DNN [18]。传统的 DNN 打开所有节点以在后续层中连接，而 GNN 强制每个节点根据从其相邻节点聚合的信息更新其潜在状态，从而有效地学习大规模网络中的局部特征。传统上，GNN 已应用于图结构天生给定的情况（例如，社交网络 [19]）。最近的一些研究试图通过从问题公式中创建图，将 GNN 应用于更一般的情况，例如无线网络中的无线电资源优化 [20]。
+
+基于无线电的定位是应用 GNN 的另一个新兴应用，也是本文的中心主题。创建图的一种直接方法是将定位 AP 指定为节点。假设 AP 的位置是给定的，它们之间的边可以根据它们的几何关系构建。例如，在 [2] 和 [3] 中创建了一个全连接图，其边权重被分配为与相应的间距成反比。该图用于构建包含几个图卷积网络（GCN）层的定位算法，GCN 是卷积网络的 GNN 版本 [21]。在 [4] 中，考虑了三种类型的 AP（WiFi、ZigBee 和蓝牙），每种都建模为全连接双向图。然后添加用户与 AP 之间的定向边，权重与估计距离成反比。借助 GraphSAGE 层 [22]，可以通过统一所有生成的图来定位用户。在 [6] 中考虑了多用户场景，其中 AP 和用户都被指定为节点，假设每个节点都可以通信。
+
+最近的几项研究提出了除上述方法之外配置图的不同方法。在 [7] 中，信道状态信息（CSI）被转换为由复数组成的 2D 图像。图像中的像素被视为节点，它们的邻接性决定了连通性。复数的幅度和相位成为构建图的输入特征。在 [5] 中，基于 GNN 的定位被扩展到联邦学习（Federated Learning），其中全局服务器将客户端视为节点，并通过利用不同客户端嵌入向量之间的相似性来确定它们之间的邻接矩阵。每个客户端基于图同构网络（GIN）[18] 更新其模型，服务器通过带有自注意力机制的 GCN 聚合它们。我们在表 1 中总结了上述讨论的基于 GNN 的定位技术。
+
+尽管它们有效，但大多数基于 GNN 的定位技术都有一个共同的实际限制：它们是基于监督学习设计的。它们需要标记许多数据样本，通常是收集相应测量值的地面实况位置，这是一项耗时且劳动密集的活动。此外，即使给定了数据标记，训练后的 GNN 的有效持续时间也是有限的，因为无线电信号特征会由于各种因素（例如温度、行人密度等）随时间变化，导致训练数据与实际测量值之间不匹配。
+
+\begin{table*}[t]
+\caption{基于 GNN 的定位方法调查}
+\centering
+\begin{tabular}{|l|l|l|l|l|l|l|}
+\hline
+\textbf{参考文献} & \textbf{节点 (Node)} & \textbf{边 (Edge)} & \textbf{特征 (Feature)} & \textbf{GNN} & \textbf{损失函数} & \textbf{输出} \\ \hline
+[2] & APs & 全连接 (1/距离) & SS & GCN & 交叉熵 & 指纹标签 \\ \hline
+[3] & APs & 全连接 (1/距离) & SS & GCN & MSE & 2D 位置 \\ \hline
+[4] & APs, 目标 & 全连接 (1/距离) & SS & GraphSAGE & Huber & 2D 位置 \\ \hline
+[5] & APs & 全连接 (1/距离) & SS & GIN & MAE & 2D 位置 \\ \hline
+[6] & 客户端 & 全连接 (分布相似性) & 嵌入向量 & GCN & RMSE & 局部权重集 \\ \hline
+[7] & 像素 & 间距 (二进制), 相邻像素 (二进制) & 估计距离, CSI 幅度和相位 & GCN, GraphSAGE & 交叉熵 & 2D 位置, 指纹标签 \\ \hline
+\textbf{MINGLE} & \textbf{MPs 序列} & \textbf{时间邻接, 方向一致性 (二进制)} & \textbf{RTTs} & \textbf{GCN} & \textbf{MSE} & \textbf{2D 位置} \\ \hline
+\end{tabular}
+\end{table*}
+
+\subsection{贡献 (Contributions)}
+与上述作品相反，我们利用用户移动性作为设计 MINGLE 的关键成分。具体而言，我们关注用户移动性的固有特征：人们倾向于以相对恒定的速度移动，该速度由其移动类型（例如步行、跑步等）决定 [23]，并在从一个地方移动到另一个地方时进行直线转换 [24]-[26]。由于智能手机的恒定采样间隔，相邻测量点（MPs）之间的位移通常保持不变，提供了以下三重机会。
+
+首先，考虑到 WiFi 测量的空间相关性，我们可以通过将 MPs 设置为节点并在它们在时间上相邻时连接它们来创建移动性诱导图。我们在整个工作中将其称为时间驱动移动图（TMG）。其次，用户直线转换上的每个 MP（足以使用内置 IMU 检测到）都可以连接起来以创建另一个移动性诱导图，称为方向驱动移动图（DMG）。图 1 显示了 TMG 和 DMG 的图形说明。随着用户轨迹变长，TMG 和 DMG 的度数增加，有助于提高定位性能。最后，相邻节点之间的这种规则间距可以反映在损失函数设计中，以便在没有地面实况位置的情况下训练 GNN。换句话说，利用用户移动性使得在半监督学习和自监督学习框架下开发 MINGLE 成为可能，从而克服了最先进的 GNN 定位工作的主要缺点。
+
+这项工作的主要贡献如下：
+\begin{itemize}
+    \item \textbf{移动性诱导图的实时生成}：如前所述，基于用户的实时移动生成两种类型的图，即 TMG 和 DMG，每种图都能有效地提取在分析用户移动模式时有用的不同特征。首先，TMG 是一个连通图，它根据相应节点之间的跳数表示 MPs 之间的间距。其次，DMG 是由多个子图组成的不连通图，每个子图代表用户的直线移动模式。它有助于表达每个子图上 MPs 的方向一致性。
+    \item \textbf{MINGLE 架构的跨图学习和移动性正则化}：MINGLE 有两个标志性设计组件：跨图学习和移动性正则化。首先，提取 TMG 和 DMG 的不同潜力并为精确估计用户位置制定统一框架至关重要。为此，我们基于跨图学习设计 MINGLE，使得两个不同的 GNN 使用不同类型的输入特征单独训练，但共享它们的权重。其次，用户的稳定步速可以反映在损失函数的正则化项上，表现为相邻 MPs 之间间距的小方差。如前所述，移动性正则化不需要地面实况位置，有助于在给定少量或没有地面实况时找到用户的精确位置估计。
+    \item \textbf{广泛的现场实验}：我们进行了涵盖不同移动模式和时间环境变化的广泛现场实验。所提出的 MINGLE 的有效性通过显示比几个基准更准确的定位结果得到了很好的验证，例如在没有和有 5-10\% 地面实况位置的情况下，平均绝对误差（MAEs）分别为 1.510 (m) 和 1.077 (m)。
+\end{itemize}
+
+本文的其余部分组织如下。第二节介绍了系统模型和问题公式。第三节介绍了所提出的移动性诱导图学习框架，包括移动性诱导图的定义、输入特征生成、网络架构和损失函数设计。第四节介绍了实验结果，随后在第五节中给出了结论性意见。
+
+\begin{figure}[htbp]
+\centering
+% [此处插入图片 Fig. 1]
+% \includegraphics[width=0.45\textwidth]{fig1_placeholder.png}
+\caption{图 1. 表示用户真实轨迹与两种类型的移动性诱导图（即定义 2 中定义的 TMG 和 DMG）之间关系的图形示例。}
+\label{fig:1}
+\end{figure}
+
+\section{系统模型与问题公式 (System Model and Problem Formulation)}
+本节解释了我们的系统模型，包括网络模型和测量类型。然后，我们描述了我们在整个工作中解决的问题。
+
+\subsection{网络模型 (Network Model)}
+考虑一个部署了 $M$ 个 WiFi AP 的 WiFi 定位网络。AP 的索引集表示为 $\mathcal{M}=\{1,2,\cdot\cdot\cdot,M\}$。每个 AP 的二维（2D）坐标，对于 AP $m\in\mathcal{M}$ 表示为 $z^{(m)}\in\mathbb{R}^{2}$，假设是静止的并且预先给定。接下来，智能手机用户在网络周围移动，并且以恒定的间隔 $\Delta$ (秒) 采样下文解释的几个测量值。采样测量值的位置称为 MPs（测量点）。MPs 坐标的序列给出为 $\{x_{n}\}$，其中 $x_{n}\in\mathbb{R}^{2}$ 是第 $n$ 个 MP 的 2D 坐标。MPs 的索引集表示为 $\mathcal{N}=\{1,\cdot\cdot\cdot,N\}$，其中 $N$ 是在 $T$ (秒) 持续时间内的 MPs 数量，给出为 $N=\lfloor\frac{T}{\Delta}\rfloor$，其中 $\lfloor\cdot\rfloor$ 是向下取整函数。
+
+除了一些与相关区域中的地标（例如柱子和大门）重合的 MPs 外，通常可以将 MP 的坐标视为未知。我们引入一个二进制序列 $\{\alpha_{n}\}_{n=1}^{N}$，如果相应的地面实况 $x_{n}$ 已知，则 $\alpha_{n}$ 为 1，否则为 0，即 $\alpha_{n}\in\{0,1\}$。没有地面实况的 MPs 的索引集定义为 $\mathcal{X}=\{n|\alpha_{n}=0,n\in\mathcal{N}\}$。这项工作的目标是精确估计 $\mathcal{X}$ 中 MPs 的坐标。
+
+\subsection{测量与假设 (Measurements and Assumption)}
+用户的智能手机可以收集各种测量值以帮助定位用户。其中，这项工作考虑两种测量值，即 RTT 和航向方向变化，每种将在下面详细阐述。
+
+\subsubsection{往返时间 (Round Trip Time)}
+每个 WiFi AP 和智能手机之间的 RTT，定义为两者之间的双向传播时间，可以通过 IEEE 802.11mc 发起的精细定时测量（FTM）协议进行测量 [27]。我们假设 WiFi AP 和用户的智能手机都支持 FTM 协议，并且可以在每个采样的 MP 处估计所有 AP 的 RTT，表示为 $\tau_{n}\in\mathbb{R}^{M}$，给出为
+\begin{equation}
+\tau_{n}=[\tau_{n}^{(1)},\tau_{n}^{(2)},\cdot\cdot\cdot,\tau_{n}^{(M)}], \quad n=1,\cdot\cdot\cdot,N, \label{eq:1}
+\end{equation}
+其中 $\tau_{n}^{(m)}$ 是第 $n$ 个 MP 处来自 WiFi AP $m$ 的 RTT 测量值。
+
+在 LoS 条件下，WiFi AP 和用户之间的间距可以通过将光速的一半 $c\approx3\times10^{8}(m/s)$ 乘以相应的 RTT 来精确检测，如 [28] 中实验验证的那样。另一方面，在 NLoS 条件下，WiFi 信号的传播路径由于频繁的遮挡而严重偏离直接路径，导致高估间距 [29]。与解决 NLoS 问题的几个先前工作不同（例如 [30] 和 [31]），这里没有关于 LoS 和 NLoS 条件的统计数据。
+
+\begin{figure}[htbp]
+\centering
+% [此处插入图片 Fig. 2]
+% \includegraphics[width=0.45\textwidth]{fig2_placeholder.png}
+\caption{图 2. 用户移动轨迹与生成的 IMU 测量值之间的关系。(a) 具有 7 个 MPs 和 2 个 SCs 的用户轨迹示例。(b) 加速度计和陀螺仪的测量值及其相关指标，包括原始航向变化 $\theta_{n}$ (2)，二进制航向变化 $\beta_{n}$ (3)，以及加速度计波峰和波谷之间的平均差距 $r(l)$，在 (5) 中指定。}
+\label{fig:2}
+\end{figure}
+
+\subsubsection{航向方向变化 (Heading Direction Change)}
+智能手机的内置陀螺仪传感器可以跟踪其航向方向变化。考虑用户位于第 $n$ 个 MP 的时刻。在移动到第 $(n+1)$ 个 MP 期间，智能手机记录了陀螺仪的 z 轴测量值，表示为 $g_{z}(t)$，其中 $n\Delta<t\le(n+1)\Delta$。然后，相应的航向变化，表示为 $\theta_{n}$，可以通过积分 $g_{z}(t)$ 计算为
+\begin{equation}
+\theta_{n}=\int_{n\Delta}^{(n+1)\Delta}g_{z}(s)ds, \quad n=1,\cdot\cdot\cdot,N-1. \label{eq:2}
+\end{equation}
+众所周知，陀螺仪的测量对用户不可预测的活动很敏感，会带来相当大的偏差和噪声。由此产生的航向变化可能与地面实况有很大不同。我们不使用嘈杂的原始航向方向 $\theta_{n}$，而是将其量化为表示方向是否发生显着变化的两个状态。具体而言，我们引入一个二进制变量序列 $\{\beta_{n}\}_{n=1}^{N}$，其中 $\beta_{n}$ 是 $\theta_{n}$ 的量化值，给出为
+\begin{equation}
+\beta_{n}=\begin{cases}1,& \text{如果 } |\theta_{n}|\ge\delta,\\ 0,& \text{否则},\end{cases} \label{eq:3}
+\end{equation}
+其中 $\delta$ 是预定义的阈值。不失一般性，我们设置 $\beta_{N}=1$ 以表示轨迹的结束。在第 IV 节的现场实验中，我们将 $\delta$ 设置为 0.5 (rad)。图 2 图形化地说明了原始航向变化 $\theta_{n}$ 及其量化值 $\beta_{n}$ 之间的关系。有了 $\{\beta_{n}\}$，我们可以做出以下定义：
+
+\textbf{定义 1 (稳定路线, Steady Course, SC)}：如果连续 MPs 的子序列中的 $\beta_{n}$ 除最后一个外均为零，则称用户处于稳定路线 (SC) 上。具体而言，第 $l$ 个 SC 可以用满足以下条件的子序列 $\{s(l),s(l)+1,\cdot\cdot\cdot,e(l)-1,e(l)\}$ 表示：
+\begin{equation}
+\{\beta_{s(l)},\beta_{s(l)+1},\cdot\cdot\cdot,\beta_{e(l)-1},\beta_{e(l)}\}=\{0,0,\cdot\cdot\cdot,0,1\}, \label{eq:4}
+\end{equation}
+其中 $s(l)$ 和 $e(l)$ 分别是第 $l$ 个 SC 上的第一个和最后一个 MP 的索引。
+
+\textbf{假设 1 (速度一致性, Consistent Speed)}：假设用户在同一个 SC 上的移动速度是恒定的，而在不同的 SC 上可能会发生变化。
+
+假设 1 允许我们认为同一个 SC 上的 MPs 是等间距的。不同 SC 上 MPs 间距的关系将在下文中解释。如第 I 节所述，用户倾向于以一致的移动模式（步行、跑步等）以稳定的步速从一个地方移动到另一个地方，这使得文献中的许多作品可以使用假设 1（参见例如 [24],[25] 和 [26]）。
+
+\subsubsection{速度变化 (Speed Variation)}
+智能手机的加速度计有助于估计用户在改变 SC 时加速或减速的程度。表示加速度计的三维测量值为 $u(t)\in\mathbb{R}^{3}$，其 L2 范数 $||u(t)||$ 在第 $l$ 个 SC 上移动时在峰值和谷值之间反复振荡，如图 2 所示。通过遵循几个先前的研究，例如 [8] 和 [32]，同一个 SC 内峰值和谷值之间的平均差距，表示为 $r(l)$，被认为与步长的四次方成反比。注意到步长与相应的移动速度成正比，第 $l$ 个 SC 上的移动速度可以给出为 $\eta\cdot r(l)^{\frac{1}{4}}$，其中 $\eta$ 取决于实践中未知的用户个人参数。然后，我们可以通过用它们的最小值归一化来获得不同 SC 之间的速度变化，给出为
+\begin{equation}
+v(l)=\frac{r(l)^{\frac{1}{4}}}{\min_{s}[r(s)^{\frac{1}{4}}]}, \label{eq:5}
+\end{equation}
+这独立于 $\eta$。
+
+\subsection{问题描述 (Problem Description)}
+给定 (1) 中的 $\{\tau_{n}\}$，(4) 中的 $\{(s(l),e(l))\}$ 和 (5) 中的 $\{v(l)\}$，我们试图以半监督或自监督学习的方式估计用户的位置。具体而言，位置估计的序列表示为 $\{\hat{x}_{n}\}$，其中 $\hat{x}_{n}$ 表示第 $n$ 个 MP 处的位置估计。如第 II-A 节所述，所有 AP 的坐标，即对于所有 $m\in\mathcal{M}$ 的 $z^{(m)}$，都是预先已知的。在上述信息的条件下，我们的目标是找到一个映射函数 $f$，定义为
+\begin{equation}
+\{\hat{x}_{n}\}=f(\{\tau_{n}\},\{(s(l),e(l))\},\{v(l)\}|\{z^{(m)}\}), \label{eq:6}
+\end{equation}
+该函数受到以下三个要求的约束：
+
+1) \textbf{地面实况位置 (Ground-Truth Location)}：不在 $\mathcal{X}$ 中的 MPs 的位置估计应等同于地面实况，即，
+\begin{equation}
+\hat{x}_{n}=x_{n}, \quad \forall n\in\mathcal{X}^{c}. \label{eq:7}
+\end{equation}
+除非补集 $\mathcal{X}^{c}$ 为空，否则所关注的定位问题变成半监督学习。否则，它简化为自监督学习。
+
+2) \textbf{同一 SC 内的等间距 (Equivalent Inter-Distance within one SC)}：根据假设 1，同一 SC 上相邻 MPs 的位置估计应等间距，即，
+\begin{equation}
+||\hat{x}_{n-1}-\hat{x}_{n}||=||\hat{x}_{n}-\hat{x}_{n+1}||, \quad s(l)\le n<e(l), n\ge2, \label{eq:8}
+\end{equation}
+其中 $s(l)$ 和 $e(l)$ 是 (4) 中指定的第 $l$ 个 SC 上的第一个和最后一个 MP 的索引。
+
+3) \textbf{跨 SC 的间距变化 (Inter-Distance Change over SCs)}：如第 II-B3 节所述，第 $l$ 个 SC 上相邻 MPs 之间的间距与 (5) 中的 $v(l)$ 成正比，导致以下条件：
+\begin{equation}
+\frac{||\hat{x}_{n_{1}-1}-\hat{x}_{n_{1}}||}{v(l_{1})}=\frac{||\hat{x}_{n_{2}-1}-\hat{x}_{n_{2}}||}{v(l_{2})}, \label{eq:9}
+\end{equation}
+其中 $s(l_{1})\le n_{1}\le e(l_{1})$ 和 $s(l_{2})\le n_{2}\le e(l_{2})$ 对于 $n_{1}\ge2$ 和 $n_{2}>2$。
+
+\begin{figure*}[t]
+\centering
+% [此处插入图片 Fig. 3]
+% \includegraphics[width=0.9\textwidth]{fig3_placeholder.png}
+\caption{图 3. MINGLE 架构的图形说明。首先，RTT 向量序列，即 (1) 中的 $\{\tau_{n}\}$，用于通过后文中指定的后处理技术生成输入特征。接下来，输入特征通过具有权重共享的两层 GCN 嵌入到定义 2 中定义的两种类型的移动性诱导图中。最后，GCN 的输出被视为所有 MPs 的 2D 位置估计。}
+\label{fig:3}
+\end{figure*}
+
+\section{移动性诱导图学习 (Mobility-Induced Graph Learning)}
+本节提出了一种新颖的基于 GNN 的定位算法，称为 MINGLE，以解决第 II-C 节中提到的问题。我们首先介绍两种由用户移动性诱导的图，并概述基于生成图的 MINGLE 的整个架构。接下来，我们将详细解释 MINGLE 的每个部分，包括输入特征生成、网络架构和损失函数设计。
+
+\subsection{移动性诱导图与架构概述 (Mobility-Induced Graphs and Architecture Overview)}
+当节点和边被指定时，可以定义一个图。在以下定义中，将从节点和边的角度定义两种生成的图，即 TMG 和 DMG。
+
+\textbf{定义 2 (移动性诱导图)}：TMG 和 DMG 共享相同的节点，即所有 $N$ 个 MPs 索引 $\mathcal{N}$。另一方面，TMG 和 DMG 的边分别取决于邻接矩阵 $A,B\in\mathbb{R}^{N\times N}$，具体如下：
+
+\textbf{TMG}：如果两个索引之间的差异小于预定义的阈值 $\epsilon$，则 TMG 中的两个节点相连，给出为
+\begin{equation}
+A_{i,j}=\begin{cases}1,& \text{如果 } |i-j|\le\epsilon\\ 0,& \text{否则}.\end{cases} \label{eq:10}
+\end{equation}
+
+\textbf{DMG}：DMG 的边取决于定义 1 中定义的 SC。假设有 $L$ 个 SCs，每个的长度给出为 $d(l)=e(l)-s(l)+1$。然后，如果 DMG 的两个节点的差异小于半长度\footnote{DMG 中创建边的半长度约束是基于经验法则，这允许我们稳定地训练后文指定的拟议 GNN 架构。}，则它们相连，给出为 $B=\sum_{l=1}^{L}B(l)$，其中
+\begin{equation}
+(B(l))_{i,j}=\begin{cases}1,& \text{如果 } i,j\in\{s(l),\cdot\cdot\cdot,e(l)\}\\ & \text{并且 } |i-j|\le\lfloor\frac{d(l)}{2}\rfloor,\\ 0,& \text{否则}.\end{cases} \label{eq:11}
+\end{equation}
+结果，TMG 和 DMG 可以分别表示为 $G_{A}(\mathcal{N},\mathcal{E}_{A})$ 和 $G_{B}(\mathcal{N},\mathcal{E}_{B})$，其中
+\begin{equation}
+\mathcal{E}_{A}=\{(i,j)|A_{i,j}=1\}, \quad \mathcal{E}_{B}=\{(i,j)|B_{i,j}=1\}. \label{eq:12}
+\end{equation}
+
+\textbf{备注 1 (TMG 和 DMG)}：两个生成的图可以在估计用户未知位置方面做出不同的贡献。TMG 有效地捕获了在相似时间采样的相邻 MPs 之间的空间相关性，有助于每个位置估计连接到其相邻的位置估计。另一方面，DMG 专注于用户的线性运动，通过减少关注的搜索维度来减轻定位其上 MPs 的负担。
+
+为了充分释放 TMG 和 DMG 的独特潜力，我们基于它们开发了 MINGLE 的架构，如图 3 所示。架构的每个部分将在以下小节中详细阐述。
+
+\subsection{输入特征生成 (Input Feature Generation)}
+我们使用两种类型的输入特征。第一种是堆叠归一化 RTT 向量的矩阵，表示为 $F_{1}\in\mathbb{R}^{N\times M}$，给出为
+\begin{equation}
+F_{1}=[\frac{\tau_{1}}{\tau_{1}\mathbf{1}};\frac{\tau_{2}}{\tau_{2}\mathbf{1}};\cdot\cdot\cdot;\frac{\tau_{N}}{\tau_{N}\mathbf{1}}] \label{eq:13}
+\end{equation}
+其中 $\mathbf{1}$ 是一个元素全为 1 的列向量。
+
+其次，受 [14] 中 CDA 方法的启发，我们通过不同的 RTT 组合增强上述输入特征。例如，考虑第 $n$ 个 MP 处的 $M$ 个 RTTs，即 (1) 中的 $\tau_{n}$。我们可以从 $M$ 个中选择 $K$ 个，使我们能够制作 $Q=\binom{M}{K}$ 个不同的 RTT 集合。当 $K \ge 3$ 时，每个集合的 RTTs 可以使用传统的多边定位算法（例如 [33]）转换为 2D 位置估计，表示为 $y^{(q)}\in\mathbb{R}^{1\times2}$。我们称之为初步估计位置（Preliminary Estimated Location, PEL）。我们通过连接所有 PELs 来制作增强的输入特征向量 $f_{n}\in\mathbb{R}^{1\times2Q}$，给出为
+\begin{equation}
+f_{n}=[y^{(1)},y^{(2)},\cdot\cdot\cdot,y^{(Q)}]. \label{eq:14}
+\end{equation}
+然后，表示为 $F_{2}\in\mathbb{R}^{N\times2Q}$ 的第二个输入特征矩阵可以通过堆叠 $f_{n}$ 的归一化版本得出，给出为
+\begin{equation}
+F_{2}=[\frac{f_{1}}{f_{1}\mathbf{1}};\frac{f_{2}}{f_{2}\mathbf{1}};\cdot\cdot\cdot;\frac{f_{N}}{f_{N}\mathbf{1}}] \label{eq:15}
+\end{equation}
+PEL 的有效性在 [14] 中得到了很好的验证，即当使用 PELs 作为指纹定位的输入特征时，与输入特征为 RTTs 的情况相比，定位精度显著提高。
+
+\textbf{备注 2 (低维与高维特征)}：注意到 PELs 的数量 $Q$ 远大于 AP 的数量 $M$，两个矩阵 $F_{1}$ 和 $F_{2}$ 可以分别被视为嵌入在低维和高维空间中的输入特征，它们在所提出的基于 GNN 的定位算法中起互补作用。众所周知，GNN 在给定大规模输入特征（如 $F_{2}$）时是有效的。然而，增加到高维空间可能会削弱相邻特征之间的空间相关性。我们使用 $F_{1}$ 作为补充来解决这一限制，它是低维的，但保留了 RTT 测量的空间局部性。
+
+\begin{figure*}[t]
+\centering
+% [此处插入图片 Fig. 4]
+% \includegraphics[width=0.9\textwidth]{fig4_placeholder.png}
+\caption{图 4. MINGLE 的两层 GNN 架构，每一层包含两个用于 TMG 和 DMG 的 GCN，并共享它们的权重。损失函数 $Loss(\{a_{n},b_{n}\})$ 的详细形式在 (27) 中指定。}
+\label{fig:4}
+\end{figure*}
+
+\subsection{网络架构：跨图设计 (Network Architecture: Cross-Graph Design)}
+本小节解释了我们基于跨图学习的网络架构，其中 TMG $G_{A}(\mathcal{N},\mathcal{E}_{A})$ 和 DMG $G_{B}(\mathcal{N},\mathcal{E}_{B})$ 的两个不同 GCN 模型通过共享其权重进行联合训练。如备注 1 所述，我们的目标是在不发生灾难性遗忘的情况下保留 TMG 和 DMG 的属性，而在 GNN 领域，权重共享是实现这一目标的一种代表性技术（参见例如 [34] 和 [35]）。为此，我们为这两个图使用两层 GCN 模型，如图 4 所示。具体而言，第一层的向量表示，其维度设置为 $h_{1}$，是权重矩阵 $W_{1}\in\mathbb{R}^{2Q\times h_{1}}$ 的函数，给出为
+\begin{equation}
+H_{A}^{(1)}(W_{1}|G_{A})=\text{ReLU}(\hat{A}F_{1}QW_{1}), \label{eq:16}
+\end{equation}
+\begin{equation}
+H_{B}^{(1)}(W_{1}|G_{B})=\text{ReLU}(\hat{B}F_{2}W_{1}). \label{eq:17}
+\end{equation}
+这里，$\hat{A}\in\mathbb{R}^{N\times N}$ 和 $\hat{B}\in\mathbb{R}^{N\times N}$ 是归一化的邻接矩阵，给出为
+\begin{equation}
+\hat{A}=D_{A}^{-\frac{1}{2}}AD_{A}^{-\frac{1}{2}}, \quad \hat{B}=D_{B}^{-\frac{1}{2}}BD_{B}^{-\frac{1}{2}}, \label{eq:18}
+\end{equation}
+其中 $D_{A}$ 和 $D_{B}$ 是对角矩阵，其元素分别代表 $A$ 和 $B$ 中相应行向量的和。我们在整个工作中设置 $h_{1}=3000$。可以观察到，输入特征 $F_{1}$ 和 $F_{2}$ 分别被馈送到 TMG 和 DMG 的 GCN 模型中。生成的图和输入特征之间的这种映射与备注 1 和 2 中的讨论非常吻合，其最优性将在第 IV 节中通过实验进行研究。此外，我们将多层感知机（MLP）权重矩阵 $Q\in\mathbb{R}^{M\times2Q}$ 与 $F_{1}$ 相乘。所得维度随后变得等同于 $F_{2}$，便于共享公共权重 $W_{1}$。
+
+接下来，上述第一层的输出被递归地输入到第二 GCN 层，其公共权重矩阵表示为 $W_{2}\in\mathbb{R}^{h_{1}\times2}$。然后，得到的嵌入向量，即 $H_{A}^{(2)}\in\mathbb{R}^{N\times2}$ 和 $H_{B}^{(2)}\in\mathbb{R}^{N\times2}$，是 $W_{1}$ 和 $W_{2}$ 的函数，给出为
+\begin{align}
+H_{A}^{(2)}(W_{1},W_{2}|G_{A}) &= \hat{A}H_{A}^{(1)}W_{2} \nonumber \\
+&= \hat{A}(\text{ReLU}(\hat{A}F_{1}QW_{1}))W_{2} \label{eq:19}
+\end{align}
+\begin{align}
+H_{B}^{(2)}(W_{1},W_{2}|G_{B}) &= \hat{B}H_{B}^{(1)}W_{2} \nonumber \\
+&= \hat{B}(\text{ReLU}(\hat{B}F_{2}W_{1}))W_{2}. \label{eq:20}
+\end{align}
+结果，第 $n$ 个 MP 处的 RTT 测量值，即 (1) 中的 $\tau_{n}$，可以转换为嵌入到 2D 空间中的两个向量表示，给出为
+\begin{equation}
+a_{n}=r_{n}(H_{A}^{(2)}), \quad b_{n}=r_{n}(H_{B}^{(2)}) \label{eq:21}
+\end{equation}
+其中 $r_{n}(\cdot)$ 返回其中矩阵的第 $n$ 个行向量。我们的目标是训练权重矩阵 $W_{1}$ 和 $W_{2}$，通过最小化下文介绍的损失函数，生成与地面实况位置 $\{x_{n}\}$ 相似的最终向量表示 $\{a_{n}\}$ 和 $\{b_{n}\}$。
+
+\textbf{备注 3 (GCN 层数)}：所提出的 MINGLE 具有两层 GCN 架构，与传统的深度 CNN 架构相比相对较浅。图 5 显示，添加更多层并没有显着提高定位精度，反而由于梯度消失问题而使其降低 [36]。训练深度 GCN 的几种设计，例如残差连接、密集连接和空洞卷积，可能会提供更好的精度，但计算复杂度更高。优化精度-复杂度的权衡很有趣，这将留待我们未来的工作。
+
+\subsection{损失函数设计 (Loss Function Design)}
+关注 (7)、(8) 和 (9) 中指定的三个条件，我们设计了一个损失函数，表示为 $Loss(\{a_{n}\},\{b_{n}\})$，它包括两项，分别代表位置估计的均方误差（MSE）和由用户移动性正则化的间距。
+
+\subsubsection{均方误差 (Mean Square Error)}
+位置估计的 MSE 可以分为有和没有地面实况位置的两种情况。首先，考虑少数几个给定了地面实况位置的 MPs，即 $x_{n}$ 其中 $n\in\mathcal{X}^{c}$。通过输入 (21) 的向量表示，我们可以定义以下基于 MSE 的损失函数：
+\begin{equation}
+MSE_{1}(\{(a_{n},b_{n})\}_{n\in\mathcal{X}^{c}})=\sum_{n\in\mathcal{X}^{c}}||a_{n}-x_{n}||^{2}+||b_{n}-x_{n}||^{2}, \label{eq:22}
+\end{equation}
+其最小化导致满足 (7) 的第一个条件。
+
+其次，受 [14] 的启发，我们可以使用基于 CDA 的位置估计作为其实时标签。尽管这些标签存在误差，但已通过实验验证可以实现不错的定位精度，甚至优于标签本身。表示第 $n$ 个 MP 处的 CDA 基础位置估计为 $c_{n}$。为了简洁起见，省略了推导 $c_{n}$ 的详细算法，但在附录 A 中进行了总结。给定 $\{c_{n}\}$，我们可以计算没有地面实况的 MPs 的基于 MSE 的损失函数，给出为
+\begin{equation}
+MSE_{2}(\{(a_{n},b_{n})\}_{n\in\mathcal{X}})=\sum_{n\in\mathcal{X}}||a_{n}-c_{n}||^{2}+||b_{n}-c_{n}||^{2}. \label{eq:23}
+\end{equation}
+通过对 (22) 和 (23) 进行等权重加权，我们可以获得整体基于 MSE 的损失函数，给出为
+\begin{align}
+Loss_{MSE}(\{a_{n},b_{n}\}) &= \frac{1}{2}MSE_{1}(\{(a_{n},b_{n})\}_{n\in\mathcal{X}^{c}}) \nonumber \\
+&\quad +\frac{1}{2}MSE_{2}(\{(a_{n},b_{n})\}_{n\in\mathcal{X}}) . \label{eq:24}
+\end{align}
+
+\subsubsection{移动性正则化 (Mobility Regularization)}
+回顾假设 1 中同一 SC 上的恒定速度假设，我们将问题公式化为最小化相邻 MPs 之间间距的方差，这是约束 (8) 和 (9) 的替代方案。给定 (21) 中的向量表示 $b_{n}$，我们表示 $\gamma_{n}$ 为第 $(n-1)$ 个和第 $n$ 个 MPs 的位置估计之间的间距，并通过 (5) 中的速度变化因子 $v(l)$ 归一化，对于 $n>2$，即，
+\begin{equation}
+\gamma_{n}=\frac{||b_{n}-b_{n-1}||}{v(l^{*})}, \quad l^{*}=\{l|n\in\{s(l),\cdot\cdot\cdot,e(l)\}\}. \label{eq:25}
+\end{equation}
+然后，相应的损失函数给出为
+\begin{equation}
+Loss_{MR}(\{b_{n}\}) = \text{var}(\{\gamma_{n}\}), \label{eq:26}
+\end{equation}
+其中 $\text{var}(\cdot)$ 表示其中序列的方差。
+
+通过将两个损失函数 (24) 和 (26) 相加，我们可以得出总损失函数为
+\begin{equation}
+Loss(\{a_{n}\},\{b_{n}\})=\frac{1}{1+\lambda}Loss_{MSE}(\{a_{n},b_{n}\}) +\frac{\lambda}{1+\lambda}Loss_{MR}(\{b_{n}\}), \label{eq:27}
+\end{equation}
+其中 $\lambda\ge0$ 是权重参数。在损失函数 (27) 收敛后，我们使用 (21) 中的第二个向量表示 $\{b_{n}\}$ 作为位置估计，即，
+\begin{equation}
+\hat{x}_{n}=b_{n}, \quad \forall n\in\mathcal{N} \label{eq:28}
+\end{equation}
+其最优性已通过现场实验广泛研究，并显示比第 IV-C 节中的另一个向量表示 $\{a_{n}\}$ 更准确。
+
+\textbf{备注 4 (直推式学习, Transductive Learning)}：现有的基于 DNN 的定位算法需要使用大量预先收集的测量数据样本进行离线训练。另一方面，所提出的 MINGLE 是基于直推式学习 [37] 设计的，使得 GNN 模型的训练和位置估计的推断同时进行，无需离线训练阶段。换句话说，MINGLE 需要用户在当前移动路径上获得的在线测量值，这使其在先前的测量值及其长期统计数据随时间迅速失效的场景中成为一种实际选择。
+
+\textbf{备注 5 (时间复杂度)}：MINGLE 通过定位移动路径上的所有 MPs 来有效地跟踪用户轨迹，但这会导致较长的时间跨度，大约 1-2 分钟，如表 II 总结的那样。MINGLE 的当前设计可能不适合实时响应。考虑到每个 MP 的平均时间约为 1 (秒)，修改 MINGLE 以通过顺序估计每个 MP 来实现实时定位是有趣的，这留待未来的工作。
+
+\section{现场实验 (Field Experiments)}
+本节通过广泛的现场实验验证了所提出的 MINGLE。首先解释实验地点和设置。然后，我们从各个角度将 MINGLE 与几个基准进行比较。
+
+\subsection{实验设置 (Experiment Settings)}
+我们在韩国义王市的韩国铁道技术研究院的地下停车场进行了现场实验。我们在 2 (m) 的高度安装了 10 个 WiFi AP，这是智能手机同时收集 RTTs 的最大 WiFi AP 数量。用户将智能手机保持在 1.1 (m) 的高度。使用两种智能手机（Google Pixel 2XL 和 Pixel 3a）来测量来自 AP 的 RTTs。如图 6 所示，在相关地点存在若干障碍物，例如汽车和柱子，这些障碍物经常阻挡智能手机和 AP 之间的 LoS 路径。对于训练和推理，硬件规格为 AMD Ryzen 9 7950X3D CPU 和 RTX 2070 Super GPU。
+
+考虑了四种类型的用户移动轨迹，如图 7 所示。除最后一种类型外，每个轨迹都遵循具有 4 个 SCs 的矩形移动模式，但其中的 MPs 数量不同，类型 1、2 和 3 分别为 70、34 和 83 个 MPs。此外，类型 1 和类型 2 模式上相邻 MPs 之间的距离是恒定的，而类型 3 模式根据垂直和水平路径具有不同的间距以反映不同的移动速度。与其他类型相反，类型 4 轨迹包含 8 个 SCs（两个 SCs 重叠），共有 95 个 MPs。由于每天只允许有限的实验时间，我们在 3 天内进行了 10 次实验。表 III 给出了所有实验的详细说明。值得一提的是，停放汽车的数量和位置每天都不同，导致非平稳的 RTT 分布，如附录 B 所述。特别是，第 3 天的 RTT 比第 1 天和第 2 天的 RTT 损坏更严重。
+
+如备注 4 所述，具有两层 GCN 的所提出 MINGLE 仅使用相应的 RTT 测量值针对每个实验重新训练。我们将每个 MP 的 RTT 以 8:2 的比例专门划分为训练集和验证集。训练集中的节点仅在计算用于训练的 (24) 的损失函数时包括在内，而模型的收敛性由验证集中的节点计算的损失函数验证。收敛后的最终结果成为位置估计序列。训练 epochs 的数量高达 6000，如果验证损失在 200 epochs 内没有减少，则可以提前终止。我们重复训练过程五次，通过随机化验证集、初始权重和种子数来获得更可靠的结果。由此产生的位置估计序列可以通过计算它们的中位数得出。
+
+我们将确定时间邻接性 $\epsilon$ 的参数（在 (10) 中指定）设置为 2。移动性正则化项 $\lambda$ 的权重（在 (27) 中指定）在第 1 天和第 2 天设置为 3，在第 3 天设置为 30，其最优性将在第 IV-E 节中讨论。对于半监督设置，我们假设当地面用户的移动方向改变时，给定了地面实况位置，即对于所有 $n\in\mathcal{N}$，$\alpha_{n}=\beta_{n}$。我们在新地点（韩国光州锦南路 4 街地铁站）进行了额外的实验以进一步验证。实验设置和结果总结在附录 D 中。
+
+\begin{figure}[htbp]
+\centering
+% [此处插入图片 Fig. 5]
+% \includegraphics[width=0.45\textwidth]{fig5_placeholder.png}
+\caption{图 5. 当添加更多 GCN 层时 MINGLE 的 MAE。实验设置在第 IV 节中指定。}
+\label{fig:5}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+% [此处插入图片 Fig. 6]
+% \includegraphics[width=0.45\textwidth]{fig6_placeholder.png}
+\caption{图 6. 实验地点及其由 LIDAR 扫描的平面图的几张照片。(a) 实验快照。(b) 由 LIDAR 扫描的实验环境。停放汽车的位置每天都在变化。}
+\label{fig:6}
+\end{figure}
+
+\subsection{与基准的性能比较 (Performance Comparison with Benchmarks)}
+本小节将 MINGLE 的定位精度与下面介绍的几个基准进行比较。为了使我们的半监督学习问题具有挑战性，起始 MP 不包含在地面实况位置集中。添加起始 MP 时的结果总结在附录 C 中。
+
+\begin{itemize}
+    \item \textbf{MLP}：一种基于 DNN 的无图技术，它将所有 GCN 层替换为 MLP 层。实验验证表明，输入为 (19) 的 $F_{1}$ 的上层 MLP 的输出提供了比输入为 (20) 的 $F_{2}$ 的下层 MLP 更好的定位精度。最终，我们使用上层 MLP 的输出作为位置估计。其他架构和参数与 MINGLE 相同。
+    \item \textbf{通过参考选择的线性最小二乘法 (LLS-RS)} [33]：一种代表性的多边定位算法，假设所有 RTT 都是在 LoS 条件下测量的。
+    \item \textbf{CDA} [14]：我们要克服 NLoS 传播的先前工作，通过不同的 AP 组合获得多个 PELs。MINGLE 使用基于 CDA 的位置估计作为自监督方法的实时标签。CDA 的详细过程在附录 A 中提供。
+    \item \textbf{TA} [15]：另一项先前工作，将基于 IMU 的用户轨迹对齐到 WiFi RTT 测量中。注意到 TA 基于恒定步长的假设，它仅适用于相邻 MPs 之间距离相等的情况，如图 7 中的类型 1 和类型 2。
+    \item \textbf{EKF} [11]：WiFi 定位和 PDR 的代表性融合技术。WiFi 和 PDR 结果的权重参数经过实验优化。
+    \item \textbf{GCN} [2]：受 [2] 的启发，我们考虑一个基于 GCN 的基准，简称 GCN。所有 MPs 成为相应图的节点，当它们的间距低于预定阈值时建立连接。为此，我们假设所有地面实况间距都是预先已知的。
+\end{itemize}
+
+为了公平比较，我们计算各种性能指标，包括绝对误差的第 50、75 和 95 百分位数、平均绝对误差（MAE）和均方根误差（RMSE）。所有结果总结在表 IV 中。在下文中，我们将案例分为自监督学习（无标签）和半监督学习（有少量标签），强调 MINGLE 优于基准。
+
+\begin{figure*}[t]
+\centering
+% [此处插入图片 Fig. 7]
+% \includegraphics[width=0.9\textwidth]{fig7_placeholder.png}
+\caption{图 7. 四种类型的用户轨迹。AP 的位置由蓝色三角形表示，圆圈表示 MPs。每个轨迹的详细信息总结在表 III 中。}
+\label{fig:7}
+\end{figure*}
+
+\subsubsection{自监督学习 (Self-Supervised Learning)}
+首先，图 8(a) 显示了当没有给出用于训练的地面实况位置时绝对误差的累积分布函数（CDF）。结果显示，除 TA 外，MINGLE 优于其他方法。回顾 TA 由于恒定步长的假设而不适用于类型 3 和类型 4 轨迹，从精度和适用性的角度来看，MINGLE 被认为是最有效的算法。
+
+值得注意的是，[2] 中的原始方法将所有 AP 和 MP 视为节点，这在数量充足且平衡时是有效的。我们的场景有 10 个 AP，远小于 MP 的数量，导致两种类型节点之间的不平衡，无法实现可靠的定位结果。因此，我们仅使用 MP 作为节点。
+
+值得注意的一点是与 CDA 结果的比较，其位置估计用于 MINGLE 的实时标签。如图 9 所示，MINGLE 倾向于利用两个移动性诱导图平滑附近的位置估计。另一方面，基于 CDA 的位置估计仅使用相应的 RTT 测量值导出，容易受到严重 NLoS 条件的影响。因此，MINGLE 在修正偏离地面实况的 CDA 位置估计方面是有效的，例如 MINGLE 的第 95 百分位数为 2.903 (m)，而 CDA 对应值为 5.366 (m)。
+
+\subsubsection{半监督学习 (Semi-Supervised Learning)}
+回顾在半监督学习的情况下，为航向发生变化的 MPs 给出了少量地面实况位置，例如 $\beta_{n}=1$。为了验证这些地面实况标签的效果，我们在图 8(b) 中比较了自监督和半监督学习的结果，显示出显著的性能提升。如图 10 所示，MINGLE 可以利用给定的地面实况位置来查找其他位置，这对类型 3 和类型 4 轨迹有效。我们还将 GCN [6] 的结果作为基准进行了比较，显示没有性能提升。最终，MINGLE 被认为比基准更能利用地面实况位置。
+
+接下来，我们旨在展示地面实况标签数量对定位性能的影响。为此，我们在轨迹上均匀选取 5-20\% 的 MPs 作为地面实况标签，并在图 11 中测量 MINGLE 半监督版本的 MAE。观察到一小部分标签使 MAE 显着降低，例如当给出 5\% 标签时，从 1.282 (m) 降至 1.003 (m)。随着比例的增加，标签数量的增益减少，得到的 MAE 趋于收敛，性能不再提升。
+
+最后，值得强调的是，对于自监督和半监督学习情况，MINGLE 和 MLP 之间存在显着差距。我们的定位问题，即仅给出当前移动路径的少量 RTT 数据样本，不适合 MLP，因为它依赖于大量数据样本。通过比较 MINGLE 和 MLP，我们确认利用两个移动性诱导图可以克服数据样本的短缺，这是这项工作的一个关键贡献。
+
+\subsection{跨图学习 (Cross-Graph Learning)}
+如第 III-C 节所述，我们开发了两个输入特征，即 $F_1$ 和 $F_2$，它们被输入到 TMG 和 DMG 基础的 GCN 中并共享其权重。本小节旨在确认所提出的跨图学习的最优性。为此，我们考虑两种训练网络的策略。
+\begin{itemize}
+    \item \textbf{独立学习 (Standalone Learning)}：第一种策略是为每个单独的图训练一个独立网络。注意到我们有两个输入和两个图，允许我们为独立训练策略制作 4 种组合，即 F1-TMG, F2-TMG, F1-DMG 和 F2-DMG。
+    \item \textbf{跨图学习 (Cross-Graph Learning)}：第二种策略是跨图学习，制作 4 个选项，即 (F1-TMG, F1-DMG), (F1-TMG, F2-DMG), (F2-TMG, F1-DMG), 和 (F2-TMG, F2-DMG)。
+\end{itemize}
+
+除了 (F2-TMG, F2-DMG) 外，我们使用第 IV-A 节中指定的设置。具体而言，为了稳定训练，我们将 $\lambda=3$ 而不是我们的主要设置 $\lambda=30$。本研究的所有结果总结在表 V 中。进行了几个有趣的观察。首先，每个独立方法的表现都比其跨图对应的差，证明了跨图学习的重要性。其次，主要特征-图匹配，称为 (F1-TMG, F2-DMG)，在半监督学习中实现了最佳定位精度，而反向匹配，称为 (F2-TMG, F1-DMG)，在自监督学习中提供了最佳性能。尽管如此，两者之间的差距很小，允许我们得出结论，考虑到所提出的跨图学习的有效性，特征-图映射不是一个关键因素。
+
+为了详细了解每个图的贡献，我们在图 12 中说明了我们的跨图学习估计的类型 4 轨迹，即 TMG 和 DMG 的输出，分别是在 (21) 中指定的 $\{a_{n}\}$ 和 $\{b_{n}\}$。此外，我们添加了 F2-DMG 独立学习的结果。结果表明，对于跨图方法，DMG 的输出在寻找位置方面比 TMG 的输出起着更关键的作用。因此，使用 DMG 的输出作为最终位置估计是合理的，如 (28) 中所指定。接下来，通过比较观察不同 SC 之间未对齐的 F2-DMG 独立方法，跨图学习方法无缝连接所有节点并保留每个 SC 的直线过渡。总之，F2-DMG 在实现精确定位方面做出了主要贡献，但 F1-TMG 有助于通过跨图学习改善 SC 之间的连通性。
+
+\subsection{轨迹长度的影响 (Effect of Trajectory Length)}
+为了展示轨迹长度对 MINGLE 定位性能的影响，我们将每个轨迹分为 2 个半轨迹和 4 个四分之一轨迹，并对它们应用 MINGLE。所有分段轨迹的最终 MAE 总结在表 VI 中。结果表明，具有整个轨迹的情况比其他的表现更好，这与我们对训练数据样本数量的直觉一致。为了解释，随着关注的轨迹减少，在实验 1 到 4 中的三个不同数据集之间观察到类似的结果，而在实验 5 到 10 中观察到显著的性能下降。这种下降归因于第 3 天嘈杂的 RTT 测量（参见附录 B）。换句话说，较长的轨迹更有利于补偿 WiFi RTT 的嘈杂测量。
+
+\subsection{移动性正则化项的影响 (Effect of Mobility Regularization Term)}
+本小节旨在通过将权重因子 $\lambda$ 从 0 更改为 30 来检查移动性正则化项 $Loss_{MR}(\{b_{n}\})$（如 (26) 所示）的效果。图 13 描绘了自监督和半监督学习的每个实验日关于 $\lambda$ 的 MAE。注意到当 $\lambda=0$ 时没有移动性正则化，性能增益可以定义为从最小值到 $\lambda=0$ 时的 MAE 差距。进行了几个有趣的观察。
+
+首先，在自监督学习的情况下，最佳 $\lambda$ 的存在因实验日而异，例如第 1 天和第 2 天 $\lambda=3$，而第 3 天 $\lambda=30$，证明了第 IV-A 节中 $\lambda$ 的设置是合理的。另一方面，在半监督学习的情况下，MAE 在关注范围内是 $\lambda$ 的单调递减。其次，移动性正则化项的增益因实验日而异。结果显示，第 3 天的 MAE 下降最明显，伴随着最嘈杂的 RTT 测量。因此，我们确认了移动性正则化项在实现自监督和半监督学习方面的重要性，如果添加少量可靠标签或原始 RTT 测量受到严重破坏，其效果将变得更加主导。
+
+\section{结束语 (Concluding Remarks)}
+本文提出了一种称为 MINGLE 的新型定位技术，该技术基于 GNN 设计，使用通过观察用户移动模式创建的实时图。MINGLE 具有三个关键特征以解决现有工作的几个局限性。首先，创建的移动性诱导图，即 TMG 和 DMG，可以使用智能手机的低分辨率内置 IMU 获得，因为它们只需要 IMU 测量的二进制量化值。其次，MINGLE 使我们能够无缝集成 WiFi 定位和用户移动性，而无需担心它们的重要性，因为 WiFi RTT 测量和移动性信息有助于所提出架构的不同部分。第三，基于 CDA 的实时标签和移动性正则化项有助于设计没有或仅有少量地面实况标签的 MINGLE。结果，MINGLE 被认为是实践中一种有效的定位技术，这通过显示比基准更准确的定位结果得到了实验验证。
+
+目前的工作可以向几个方向扩展。这项工作考虑了单用户场景，其中移动性诱导图是从单个用户的移动性创建的。扩展到多用户场景允许我们生成具有不同节点和边的更多图，使问题更有趣。接下来，MINGLE 的设计基于给出了足够数量的定位锚点的假设，这在仅考虑 WiFi AP 时有时具有挑战性。另一方面，通过确立足够的定位锚点，连同其他无线电技术（如 UWB 和蓝牙），可以使 MINGLE 更有效。最后，将 MINGLE 应用于车联网（Vehicle-to-Everything）场景以进行通感一体化将是另一个有前途的方向。
+
+\section{附录 (Appendix)}
+
+\subsection{组合数据增强 (Combinatorial Data Augmentation)}
+为了创建自监督标签 $c_n$，我们利用 [14] 中描述的 CDA 方法。从 AP 集合 $\mathcal{M}$ 中，选出 $M$ 个中的 $K$ 个，并考虑所有可能的组合分组为 $\{\mathcal{M}_q\}_{q=1}^Q$，其中 $Q=\binom{M}{K}$。对于子集 $\mathcal{M}_q \subset \mathcal{M}$，我们使用 (1) 中的 RTT $\tau_n^{(m)}$ 和 (14) 中的 PEL $y^{(q)}$ 定义两个误差度量 $u_n^{(q)}$ 和 $v_n^{(q)}$ 为：
+\begin{equation}
+u_n^{(q)} = \sum_{m\in\mathcal{M}_q} \left| ||z^{(m)} - y^{(q)}|| - c \cdot \tau_n^{(m)} \right|^2, \label{eq:29}
+\end{equation}
+\begin{equation}
+v_n^{(q)} = \sum_{m\in\mathcal{M}_q} \tau_n^{(m)}. \label{eq:30}
+\end{equation}
+接下来，我们定义一组 PELs 为 $Z_n = \{y^{(q)}\}_{q=1}^Q \in \mathbb{R}^{Q\times2}$。基于这组 PELs，[14] 的作者提出了两个过滤集，表示为 $Z_n^{(1)}$ 和 $Z_n^{(2)}$，使用上述误差度量为
+\begin{equation}
+Z_n^{(1)} = \{y^{(q)} \in Z_n | u_n^{(q)} \le u_n^{(q_1)} \}, 
+\end{equation}
+\begin{equation}
+Z_n^{(2)} = \{y^{(q)} \in Z_n^{(1)} | v_n^{(q)} \le v_n^{(q_2)} \}, \label{eq:30_2}
+\end{equation}
+其中 $q_1$ 和 $q_2$ 分别表示 $Z_n$ 和 $Z_n^{(1)}$ 中误差最低的第 $Q_1$ 和 $Q_2$ 个 PEL 的索引。最后，估计位置 $c_n$ 计算为 $Z_n^{(2)}$ 的中位数：
+\begin{equation}
+c_n = \text{Median}(Z_n^{(2)}). \label{eq:31}
+\end{equation}
+在我们的实验中，对于实验 1 到 4，我们设置 $K=3, Q_1=37, Q_2=12$；对于实验 5 到 10，我们设置 $K=3, Q_1=40, Q_2=20$。这些参数是使用数值方法优化的。
+
+\subsection{RTT 误差分布 (RTT Error Distribution)}
+在我们的实验设置中，不同的散射环境和智能手机设备会影响 RTT 误差分布。我们将测距误差定义为绝对误差：
+\begin{equation}
+e_n^{(m)} = \left| ||z^{(m)} - x_n|| - c \cdot \tau_n^{(m)} \right|. \label{eq:32}
+\end{equation}
+这里，$c$ 代表光速。我们将这些误差收集到一个集合中，表示为 $\{e_n^{(m)}\}$。测距误差的 CDF 在图 14 中可视化。它显示第 3 天的平均测距误差大于第 1 天和第 2 天。
+
+接下来，我们旨在通过比较类型 1、2 和 3 来调查每个实验日 RTT 测量的影响，它们的轨迹相同但在不同的日子（即分别为第 1、2 和 3 天）测量。为了与 MPs 数量分别为 70 和 34 的类型 1 和类型 2 路径进行公平比较，类型 3 路径的 MPs 数量减少到 68 和 34。如表 VII 总结的那样，由于第 3 天嘈杂的 RTT 测量的负面影响，类型 3 的 MAE 高于类型 1 和类型 2 的对应值。另一方面，随着 MPs 增加，类型 3 的 MAE 显著降低，通过利用独立于 RTT 测量的两个移动性诱导图（即 TMG 和 DMG），确认了所提出 MINGLE 的有效性。
+
+\subsection{选择地面实况位置的不同策略比较 (Comparison between Different Strategies to Select Ground-truth Locations)}
+本小节通过比较以下三种策略来调查选择地面实况位置的影响：第 IV-A 节中的主要设置（即，满足 $\alpha_n = \beta_n$ 的所有 $n \in \mathcal{N}$），带有起始 MP 的主要设置，以及随机选择。为此，(24) 的 MSE 损失函数修改为加权 MSE (WMSE) 函数，给出为
+\begin{align}
+Loss_{WMSE}(\{a_n, b_n\}) &= \eta MSE_1(\{(a_n, b_n)\}_{n\in\mathcal{X}^c}) \nonumber \\
+&\quad + (1 - \eta)MSE_2(\{(a_n, b_n)\}_{n\in\mathcal{X}}), \label{eq:33}
+\end{align}
+其中 $0 \le \eta \le 1$ 表示给定地面实况位置的节点的权重。当 $\eta = \frac{1}{2}$ 时，WMSE 损失函数简化为 (24)。图 15 说明了当 $\eta$ 从 0 变为 1 时，这些策略下的 MAEs。进行了两个关键观察。首先，第二种策略通过完全加权具有地面实况位置的节点（即 $\eta = 1$），优于其他策略，实现了接近 0.5 (m) 的 MAE，其定位问题可以通过均匀划分相邻地面实况位置之间的线段来简单解决。其次，当 $\eta = \frac{1}{2}$ 时，第一种和第三种策略之间的 MAE 差异不显着，因为 MINGLE 不依赖于地面实况标签的上下文。如果可以提前进行深入的现场调查，可能会根据地面实况选择优化 $\eta$，但这在实践中具有挑战性。
+
+\subsection{额外现场实验 (Additional Field Experiment)}
+为了确认所提出的 MINGLE 在不同环境中的有效性，我们在新地点（韩国光州锦南路 4 街地铁站）进行了额外实验。实验地点的平面图如图 16 所示。除非另有说明，我们设置 $\lambda = 3$，所有其他实验设置与第 IV 节相同。我们按照相同的移动路径进行了 9 次实验，每次一小时，由于用户的随机移动，MPs 的数量略有不同。我们在表 VIII 中总结了所有结果。图 17 展示了所提出的 MINGLE，它在自监督和半监督学习方面均优于基准，如第 IV 节中的情况。因此，我们在一个相对空旷、固定障碍物较少但有若干行人的地方确认了其有效性。
+
+\ifCLASSOPTIONcaptionsoff
+  \newpage
+\fi
+
+\begin{thebibliography}{1}
+
+\bibitem{1}
+C. Yang and H.-R. Shao, ``WiFi-based indoor positioning,'' \emph{IEEE Commun. Mag.}, vol. 53, no. 3, pp. 150–157, 2015.
+
+\bibitem{2}
+Y. Sun, Q. Xie, G. Pan, S. Zhang, and S. Xu, ``A novel gcn based indoor localization system with multiple access points,'' in \emph{Proc. Int. Wireless Commun. Mobile Comput. (IWCMC)}, 2021, pp. 9–14.
+
+\bibitem{3}
+X. Kang, X. Liang, and Q. Liang, ``Indoor localization algorithm based on a high-order graph neural network,'' \emph{Sensors}, vol. 23, no. 19, p. 8221, 2023.
+
+\bibitem{4}
+X. Luo and N. Meratnia, ``A geometric deep learning framework for accurate indoor localization,'' in \emph{Proc. IEEE 12th Int. Conf. Indoor Positioning and Indoor Navigation (IPIN)}, 2022, pp. 1–8.
+
+\bibitem{5}
+Z. Wu, X. Wu, and Y. Long, ``Multi-level federated graph learning and self-attention based personalized Wi-Fi indoor fingerprint localization,'' \emph{IEEE Commun. Lett.}, vol. 26, no. 8, pp. 1794–1798, 2022.
+
+\bibitem{6}
+W. Yan, D. Jin, Z. Lin, and F. Yin, ``Graph neural network for large scale network localization,'' in \emph{Proc. IEEE Int. Conf. Acoust. Speech and Signal Process. (ICASSP)}, 2021, pp. 5250–5254.
+
+\bibitem{7}
+X. Tang and J. Yan, ``A CSI Amplitude-phase Information Based Graph Construction for GNN Localization,'' in \emph{Proc. Int. Conf. Comput. Inf. Telecommun. Syst. (CITS)}, 2023, pp. 01–07.
+
+\bibitem{8}
+W. Kang and Y. Han, ``SmartPDR: Smartphone-based pedestrian dead reckoning for indoor localization,'' \emph{IEEE Sensors J.}, vol. 15, no. 5, pp. 2906–2916, 2014.
+
+\bibitem{9}
+J. Yun, G. Kim, S. Ramesh, and J. Han, ``RampScope: Ramp-level localization of shared mobility devices using sidewalk ramps,'' in \emph{Proc. the 24th Int. Workshop Mobile Comput. Syst. Appl. (HotMobile)}, 2023, pp. 49–54.
+
+\bibitem{10}
+S. Herath, H. Yan, and Y. Furukawa, ``Ronin: Robust neural inertial navigation in the wild: Benchmark, evaluations, \& new methods,'' in \emph{Proc. IEEE Int. Conf. Robot. Automat. (ICRA)}, 2020, pp. 3146–3152.
+
+\bibitem{11}
+M. Sun, Y. Wang, S. Xu, H. Qi, and X. Hu, ``Indoor positioning tightly coupled Wi-Fi FTM ranging and PDR based on the extended Kalman filter for smartphones,'' \emph{IEEE Access}, vol. 8, pp. 49 671–49 684, 2020.
+
+\bibitem{12}
+G. Revach, N. Shlezinger, X. Ni, A. L. Escoriza, R. J. Van Sloun, and Y. C. Eldar, ``KalmanNet: Neural network aided Kalman filtering for partially known dynamics,'' \emph{IEEE Trans. Signal Process.}, vol. 70, pp. 1532–1547, 2022.
+
+\bibitem{13}
+G. Choi, J. Park, N. Shlezinger, Y. C. Eldar, and N. Lee, ``Split KalmanNet: A robust model-based deep learning approach for state estimation,'' \emph{IEEE Trans. Veh. Technol.}, 2023.
+
+\bibitem{14}
+S. M. Yu, K. Han, J. Park, S.-L. Kim, and S.-W. Ko, ``Combinatorial data augmentation : A key enabler to bridge geometry and data-driven WiFi positioning,'' \emph{arXiv preprint arXiv:2105.07475}, 2021.
+
+\bibitem{15}
+K. Han, S. M. Yu, S.-L. Kim, and S.-W. Ko, ``Exploiting user mobility for WiFi RTT positioning: A geometric approach,'' \emph{IEEE Internet of Things J.}, vol. 8, no. 19, pp. 14 589–14 606, 2021.
+
+\bibitem{16}
+J. Choi, ``Enhanced Wi-Fi RTT ranging: A sensor-aided learning approach,'' \emph{IEEE Trans. Veh. Technol.}, vol. 71, no. 4, pp. 4428–4437, 2022.
+
+\bibitem{17}
+K. Han, S. M. Yu, S.-W. Ko, and S.-L. Kim, ``Waveform-guide transformation of IMU measurements for smartphone-based localization,'' \emph{IEEE Sensors J.}, vol. 23, no. 17, pp. 20 379–20 389, 2023.
+
+\bibitem{18}
+K. Xu, W. Hu, J. Leskovec, and S. Jegelka, ``How powerful are graph neural networks?'' \emph{arXiv preprint arXiv:1810.00826}, 2018.
+
+\bibitem{19}
+X. Li, L. Sun, M. Ling, and Y. Peng, ``A survey of graph neural network based recommendation in social networks,'' \emph{Neurocomputing}, vol. 549, 2023.
+
+\bibitem{20}
+Y. Shen, J. Zhang, S. Song, and K. B. Letaief, ``Graph neural networks for wireless communications: From theory to practice,'' \emph{IEEE Trans. Wireless Commun.}, vol. 22, no. 5, pp. 3554–3569, 2022.
+
+\bibitem{21}
+T. N. Kipf and M. Welling, ``Semi-supervised classification with graph convolutional networks,'' \emph{arXiv preprint arXiv:1609.02907}, 2016.
+
+\bibitem{22}
+W. Hamilton, Z. Ying, and J. Leskovec, ``Inductive representation learning on large graphs,'' \emph{Adv. Neural Inf. Process. Syst.}, vol. 30, 2017.
+
+\bibitem{23}
+T. Shim, J. Park, S.-W. Ko, S.-L. Kim, B. Lee, and J. Choi, ``Traffic convexity aware cellular networks: a vehicular heavy user perspective,'' \emph{IEEE Wireless Commun.}, vol. 23, no. 1, pp. 88–94, 2016.
+
+\bibitem{24}
+C. Bettstetter, G. Resta, and P. Santi, ``The node distribution of the random waypoint mobility model for wireless ad hoc networks,'' \emph{IEEE Trans. Mobile Comput.}, vol. 2, no. 3, pp. 257–269, 2003.
+
+\bibitem{25}
+I. Rhee, M. Shin, S. Hong, K. Lee, S. J. Kim, and S. Chong, ``On the levy-walk nature of human mobility,'' \emph{IEEE/ACM Trans. Netw.}, vol. 19, no. 3, pp. 630–643, 2011.
+
+\bibitem{26}
+M. D. Soltani, A. A. Purwita, Z. Zeng, C. Chen, H. Haas, and M. Safari, ``An orientation-based random waypoint model for user mobility in wireless networks,'' in \emph{Proc. IEEE Int. Conf. Commun. Workshops (ICC Workshops)}, 2020, pp. 1–6.
+
+\bibitem{27}
+IEEE Standard for Information Technology–Telecommunications and Information Exchange Between Systems Local and Metropolitan Area Networks–Specific Requirements - Part 11: Wireless LAN medium access control (MAC) and physical layer (PHY) specification, \emph{IEEE Standard 802.11-2016 (Revision of IEEE Standard 802.11-2012)}, 12 2016.
+
+\bibitem{28}
+M. Ibrahim, H. Liu, M. Jawahar, V. Nguyen, M. Gruteser, R. Howard, B. Yu, and F. Bai, ``Verification: Accuracy evaluation of wifi fine time measurements on an open platform,'' in \emph{Proc. 24th Annu. Int. Conf. Mobile Comput. Netw. (MobiCom)}, 2018, pp. 417–427.
+
+\bibitem{29}
+B. K. Horn, ``Doubling the accuracy of indoor positioning: Frequency diversity,'' \emph{Sensors}, vol. 20, no. 5, p. 1489, 2020.
+
+\bibitem{30}
+Y. Dong, T. Arslan, and Y. Yang, ``Real-time NLOS/LOS identification for smartphone-based indoor positioning systems using WiFi RTT and RSS,'' \emph{IEEE Sensors J.}, vol. 22, no. 6, pp. 5199–5209, 2021.
+
+\bibitem{31}
+B. K. Horn, ``Observation model for indoor positioning,'' \emph{Sensors}, vol. 20, no. 14, p. 4027, 2020.
+
+\bibitem{32}
+Y. Wu, H. Zhu, Q. Du, and S. Tang, ``A pedestrian dead-reckoning system for walking and marking time mixed movement using an SHSs scheme and a foot-mounted IMU,'' \emph{IEEE Sensors J.}, vol. 19, no. 5, pp. 1661–1671, 2018.
+
+\bibitem{33}
+I. Guvenc, S. Gezici, F. Watanabe, and H. Inamura, ``Enhancements to linear least squares localization through reference selection and ML estimation,'' in \emph{Proc. IEEE Wireless Commun. Netw. Conf. (WCNC)}, 2008, pp. 284–289.
+
+\bibitem{34}
+Y. Ouyang, B. Guo, X. Tang, X. He, J. Xiong, and Z. Yu, ``Learning cross-domain representation with multi-graph neural network,'' \emph{arXiv preprint arXiv:1905.10095}, 2019.
+
+\bibitem{35}
+W. Tang, H. Sun, J. Wang, Q. Qi, H. Chen, and L. Chen, ``Cross-graph embedding with trainable proximity for graph alignment,'' \emph{IEEE Trans. Knowl. Data Eng.}, vol. 35, no. 12, pp. 12 556–12 570, 2023.
+
+\bibitem{36}
+G. Li, M. Muller, A. Thabet, and B. Ghanem, ``DeepGCNs: Can GCNs go as deep as CNNs?'' in \emph{Proc. IEEE/CVF Int. Conf. Comput. Vision}, 2019, pp. 9267–9276.
+
+\bibitem{37}
+G. Ciano, A. Rossi, M. Bianchini, and F. Scarselli, ``On inductive–transductive learning with graph neural networks,'' \emph{IEEE Trans. Pattern Anal. Mach. Intell.}, vol. 44, no. 2, pp. 758–769, 2021.
+
+\end{thebibliography}
+
+\begin{IEEEbiographynophoto}{Kyuwon Han}
+(S'21) 于 2018 年获得韩国中央大学物理学学士学位，并于 2024 年获得韩国延世大学电气与电子工程博士学位。他目前在韩国三星电子的高级研发团队工作。他的研究兴趣包括室内定位、频谱共享、覆盖优化和用于无线通信的深度学习技术。Han 博士于 2019 年获得 IEEE 首尔分会学生论文奖铜奖，并于 2023 年获得韩国通信与信息科学研究所 (KICS) 的政府资助研究所所长奖。
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Seung Min Yu}
+分别于 2009 年和 2013 年获得韩国延世大学电气与电子工程学士（荣誉）和博士学位。他目前是韩国铁道技术研究院的高级研究员。他曾是韩国三星电子有限公司网络业务部的高级工程师。他还曾是韩国 NAVER 公司（韩国最受欢迎的搜索引擎）互联网研究部门的研究员。他的研究兴趣包括室内定位，以及交通系统的数据分析和机器学习。Yu 博士于 2011 年获得 IEEE 全球通信会议学生旅行资助奖，并于 2013 年获得 IEEE 车辆技术会议最佳论文奖。
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Seung-Lyun Kim}
+是韩国首尔延世大学电气与电子工程学院的教授。他最近领导了韩国 5G 论坛的智能工厂委员会。他曾是瑞典斯德哥尔摩皇家理工学院 (KTH) 无线电通信系统的助理/副教授。他曾在芬兰赫尔辛基理工大学（现阿尔托大学）、KTH 无线系统中心和日本京都大学信息学研究生院担任访问职位。他曾担任 IEEE Transactions on Vehicular Technology、IEEE Communications Letters、Elsevier Control Engineering Practice、Elsevier ICT Express 和 Journal of Communications and Network 的编委。他曾担任 IEEE Wireless Communications 和 IEEE Network 关于网络机器人无线通信的客座编辑，以及 IEEE Journal on Selected Areas in Communications 的客座编辑。他的研究兴趣包括无线电资源管理、无线网络中的 AI/ML、集体智能和机器人网络。他是 IEEE VTC 最佳论文奖、IEEE Dyspan 最佳演示奖以及最近的 IEEE Heinrich Hertz 奖的共同获得者。
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Seung-Woo Ko}
+(M'17-SM'24) 分别于 2006 年、2007 年和 2013 年获得韩国延世大学电气与电子工程学院的学士、硕士和博士学位。自 2022 年以来，他一直是仁荷大学智能移动工程系的副教授。在加入仁荷大学之前，他曾于 2019 年至 2021 年担任韩国釜山国立韩国海洋大学 (KMOU) 的助理教授，于 2013 年至 2014 年担任韩国 LG 电子的高级研究员，并于 2015 年在韩国延世大学和 2016 年至 2019 年在香港大学 (HKU) 担任博士后研究员。他的研究兴趣包括 6G 的智能无线通信和网络，特别强调语义通信、通感一体化和基于无线电的定位。
+\end{IEEEbiographynophoto}
+
+\end{document}

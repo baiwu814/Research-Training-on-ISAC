@@ -1,0 +1,127 @@
+\relax 
+\@writefile{toc}{\contentsline {section}{\numberline {I}引言 (Introduction)}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-A}}相关工作 (Prior Work)}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {I-A}1}结合用户移动性的 WiFi 定位}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {I-A}2}基于 GNN 的定位}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-B}}贡献 (Contributions)}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces 图 1. 表示用户真实轨迹与两种类型的移动性诱导图（即定义 2 中定义的 TMG 和 DMG）之间关系的图形示例。}}{2}{}\protected@file@percent }
+\newlabel{fig:1}{{1}{2}{}{figure.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {II}系统模型与问题公式 (System Model and Problem Formulation)}{2}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces 基于 GNN 的定位方法调查}}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}网络模型 (Network Model)}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}测量与假设 (Measurements and Assumption)}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {II-B}1}往返时间 (Round Trip Time)}{3}{}\protected@file@percent }
+\newlabel{eq:1}{{1}{3}{}{equation.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces 图 2. 用户移动轨迹与生成的 IMU 测量值之间的关系。(a) 具有 7 个 MPs 和 2 个 SCs 的用户轨迹示例。(b) 加速度计和陀螺仪的测量值及其相关指标，包括原始航向变化 $\theta _{n}$ (2)，二进制航向变化 $\beta _{n}$ (3)，以及加速度计波峰和波谷之间的平均差距 $r(l)$，在 (5) 中指定。}}{3}{}\protected@file@percent }
+\newlabel{fig:2}{{2}{3}{}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {II-B}2}航向方向变化 (Heading Direction Change)}{3}{}\protected@file@percent }
+\newlabel{eq:2}{{2}{3}{}{equation.2}{}}
+\newlabel{eq:3}{{3}{3}{}{equation.3}{}}
+\newlabel{eq:4}{{4}{3}{}{equation.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {II-B}3}速度变化 (Speed Variation)}{3}{}\protected@file@percent }
+\newlabel{eq:5}{{5}{4}{}{equation.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}问题描述 (Problem Description)}{4}{}\protected@file@percent }
+\newlabel{eq:6}{{6}{4}{}{equation.6}{}}
+\newlabel{eq:7}{{7}{4}{}{equation.7}{}}
+\newlabel{eq:8}{{8}{4}{}{equation.8}{}}
+\newlabel{eq:9}{{9}{4}{}{equation.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {III}移动性诱导图学习 (Mobility-Induced Graph Learning)}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}移动性诱导图与架构概述 (Mobility-Induced Graphs and Architecture Overview)}{4}{}\protected@file@percent }
+\newlabel{eq:10}{{10}{4}{}{equation.10}{}}
+\newlabel{eq:11}{{11}{4}{}{equation.11}{}}
+\newlabel{eq:12}{{12}{4}{}{equation.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}输入特征生成 (Input Feature Generation)}{4}{}\protected@file@percent }
+\newlabel{eq:13}{{13}{4}{}{equation.13}{}}
+\newlabel{eq:14}{{14}{4}{}{equation.14}{}}
+\newlabel{eq:15}{{15}{4}{}{equation.15}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces 图 3. MINGLE 架构的图形说明。首先，RTT 向量序列，即 (1) 中的 $\{\tau _{n}\}$，用于通过后文中指定的后处理技术生成输入特征。接下来，输入特征通过具有权重共享的两层 GCN 嵌入到定义 2 中定义的两种类型的移动性诱导图中。最后，GCN 的输出被视为所有 MPs 的 2D 位置估计。}}{5}{}\protected@file@percent }
+\newlabel{fig:3}{{3}{5}{}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}网络架构：跨图设计 (Network Architecture: Cross-Graph Design)}{5}{}\protected@file@percent }
+\newlabel{eq:16}{{16}{5}{}{equation.16}{}}
+\newlabel{eq:17}{{17}{5}{}{equation.17}{}}
+\newlabel{eq:18}{{18}{5}{}{equation.18}{}}
+\newlabel{eq:19}{{19}{5}{}{equation.19}{}}
+\newlabel{eq:20}{{20}{5}{}{equation.20}{}}
+\newlabel{eq:21}{{21}{5}{}{equation.21}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}损失函数设计 (Loss Function Design)}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {III-D}1}均方误差 (Mean Square Error)}{5}{}\protected@file@percent }
+\newlabel{eq:22}{{22}{5}{}{equation.22}{}}
+\newlabel{eq:23}{{23}{5}{}{equation.23}{}}
+\newlabel{eq:24}{{24}{5}{}{equation.24}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {III-D}2}移动性正则化 (Mobility Regularization)}{5}{}\protected@file@percent }
+\newlabel{eq:25}{{25}{5}{}{equation.25}{}}
+\newlabel{eq:26}{{26}{5}{}{equation.26}{}}
+\newlabel{eq:27}{{27}{5}{}{equation.27}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces 图 4. MINGLE 的两层 GNN 架构，每一层包含两个用于 TMG 和 DMG 的 GCN，并共享它们的权重。损失函数 $Loss(\{a_{n},b_{n}\})$ 的详细形式在 (27) 中指定。}}{6}{}\protected@file@percent }
+\newlabel{fig:4}{{4}{6}{}{figure.4}{}}
+\newlabel{eq:28}{{28}{6}{}{equation.28}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}现场实验 (Field Experiments)}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}实验设置 (Experiment Settings)}{6}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces 图 5. 当添加更多 GCN 层时 MINGLE 的 MAE。实验设置在第 IV 节中指定。}}{6}{}\protected@file@percent }
+\newlabel{fig:5}{{5}{6}{}{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces 图 6. 实验地点及其由 LIDAR 扫描的平面图的几张照片。(a) 实验快照。(b) 由 LIDAR 扫描的实验环境。停放汽车的位置每天都在变化。}}{6}{}\protected@file@percent }
+\newlabel{fig:6}{{6}{6}{}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}与基准的性能比较 (Performance Comparison with Benchmarks)}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-B}1}自监督学习 (Self-Supervised Learning)}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {IV-B}2}半监督学习 (Semi-Supervised Learning)}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}跨图学习 (Cross-Graph Learning)}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}轨迹长度的影响 (Effect of Trajectory Length)}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}移动性正则化项的影响 (Effect of Mobility Regularization Term)}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}结束语 (Concluding Remarks)}{7}{}\protected@file@percent }
+\bibcite{1}{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces 图 7. 四种类型的用户轨迹。AP 的位置由蓝色三角形表示，圆圈表示 MPs。每个轨迹的详细信息总结在表 III 中。}}{8}{}\protected@file@percent }
+\newlabel{fig:7}{{7}{8}{}{figure.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VI}附录 (Appendix)}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}组合数据增强 (Combinatorial Data Augmentation)}{8}{}\protected@file@percent }
+\newlabel{eq:29}{{29}{8}{}{equation.29}{}}
+\newlabel{eq:30}{{30}{8}{}{equation.30}{}}
+\newlabel{eq:30_2}{{32}{8}{}{equation.32}{}}
+\newlabel{eq:31}{{33}{8}{}{equation.33}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}RTT 误差分布 (RTT Error Distribution)}{8}{}\protected@file@percent }
+\newlabel{eq:32}{{34}{8}{}{equation.34}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}选择地面实况位置的不同策略比较 (Comparison between Different Strategies to Select Ground-truth Locations)}{8}{}\protected@file@percent }
+\newlabel{eq:33}{{35}{8}{}{equation.35}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}额外现场实验 (Additional Field Experiment)}{8}{}\protected@file@percent }
+\bibcite{2}{2}
+\bibcite{3}{3}
+\bibcite{4}{4}
+\bibcite{5}{5}
+\bibcite{6}{6}
+\bibcite{7}{7}
+\bibcite{8}{8}
+\bibcite{9}{9}
+\bibcite{10}{10}
+\bibcite{11}{11}
+\bibcite{12}{12}
+\bibcite{13}{13}
+\bibcite{14}{14}
+\bibcite{15}{15}
+\bibcite{16}{16}
+\bibcite{17}{17}
+\bibcite{18}{18}
+\bibcite{19}{19}
+\bibcite{20}{20}
+\bibcite{21}{21}
+\bibcite{22}{22}
+\bibcite{23}{23}
+\bibcite{24}{24}
+\bibcite{25}{25}
+\bibcite{26}{26}
+\bibcite{27}{27}
+\bibcite{28}{28}
+\bibcite{29}{29}
+\bibcite{30}{30}
+\bibcite{31}{31}
+\bibcite{32}{32}
+\bibcite{33}{33}
+\bibcite{34}{34}
+\bibcite{35}{35}
+\bibcite{36}{36}
+\bibcite{37}{37}
+\@writefile{toc}{\contentsline {section}{References}{9}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{Biographies}{9}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{Kyuwon Han}{9}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{Seung Min Yu}{9}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{Seung-Lyun Kim}{10}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{Seung-Woo Ko}{10}{}\protected@file@percent }
+\gdef \@abspage@last{10}
