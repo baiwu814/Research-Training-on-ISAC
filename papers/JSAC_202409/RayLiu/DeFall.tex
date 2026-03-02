@@ -1,0 +1,707 @@
+\documentclass[journal]{IEEEtran}
+\usepackage[UTF8]{ctex} % 支持中文
+\usepackage{amsmath,amsfonts,amssymb} % 支持数学公式和特殊符号 (\triangleq 等)
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{cite}
+\usepackage{array}
+
+\begin{document}
+
+\title{DeFall：基于WiFi的环境独立被动跌倒检测 \\ (DeFall: Environment-Independent Passive Fall Detection Using WiFi)}
+
+\author{Yuqian Hu, \IEEEmembership{Graduate Student Member, IEEE}, Feng Zhang, \IEEEmembership{Member, IEEE}, \\
+Chenshu Wu, \IEEEmembership{Senior Member, IEEE}, Beibei Wang, \IEEEmembership{Senior Member, IEEE}, and K. J. Ray Liu, \IEEEmembership{Fellow, IEEE}
+}
+
+\maketitle
+
+\begin{abstract}
+跌倒（Fall）被认为是老年人中最常发生的意外之一。最近，提出了许多用于跌倒检测（Fall Detection, FD）的解决方案，包括可穿戴（wearable）和非接触式（noncontact）的。其中，基于WiFi的非接触式方法因其无处不在和非侵入性而越来越受欢迎。然而，现有的工作通常需要耗费大量人力和时间的训练，才能达到合理的性能。此外，训练好的模型通常包含特定环境（environment-specific）的信息，因此无法很好地泛化到新环境中。在本文中，我们提出了DeFall，这是一种基于WiFi的被动跌倒检测系统，它独立于环境，且在新环境中无需预先训练。与以往的工作不同，我们的核心洞察是探测与人体跌倒内在相关的生理特征，即跌倒期间独特的速度（speed）和加速度（acceleration）模式。DeFall由离线模板生成阶段（offline template-generating stage）和在线决策阶段（online decision-making stage）组成，两者均以速度估计作为输入。在离线阶段，执行增强的动态时间规整（Dynamic Time-Warping, DTW）算法，以生成典型人体跌倒的速度和加速度模式的代表性模板。在在线阶段，我们将实时速度/加速度估计的模式与模板进行比较以检测跌倒。为了评估DeFall的性能，我们使用商用WiFi设备构建了原型，并在不同设置下进行了实验。结果表明，DeFall在单一收发器（transceivers）对的情况下，在视距（Line-of-Sight, LOS）和非视距（Non-LOS, NLOS）场景下，均实现了95\%以上的检测率（Detection Rate, DR），且误报率（False Alarm Rate, FAR）低于1.50\%。广泛的对比研究证实，DeFall可以在没有任何新训练的情况下很好地泛化到新环境。
+\end{abstract}
+
+\begin{IEEEkeywords}
+信道状态信息 (Channel State Information, CSI), 跌倒检测 (Fall Detection, FD) 系统, 速度估计 (speed estimation), WiFi感知 (WiFi sensing)。
+\end{IEEEkeywords}
+
+\section{引言 (Introduction)}
+随着全球人口老龄化，我们的社会在为老年人提供医疗护理方面承担着越来越艰巨的责任。在老年人的所有意外中，跌倒代表了最频繁发生的一种。世界卫生组织（WHO）的报告表明，20\%-30\%经历跌倒的老年人会遭受中度至重度伤害 [1]。跌倒甚至可能导致死亡。在世界所有地区，60岁以上成年人中由跌倒引起的死亡率是最高的 [1]。
+
+此外，跌倒造成的损害不仅体现在对身体的直接伤害上，还体现在由于缺乏及时援助而引起的所有后续不良影响，特别是对于独居者。因此，非常需要一种能够及时且自动报警的实时室内跌倒检测（FD）系统，它可以通过及时请求外部帮助来挽救生命。
+
+跌倒检测的巨大重要性推动了各种系统的开发，这些系统大致可分为两类：1）可穿戴系统和2）非接触式系统。可穿戴技术要求用户佩戴特殊设备，包括心电图（ECG）传感器、气压传感器、加速度计（accelerometers）、陀螺仪（gyroscopes）、智能手机等，以跟踪他们身体的运动 [2]-[6]。然而，除了可穿戴系统潜在的误报之外，要求用户特别是老年人携带专门的传感器是繁琐且有时是不切实际的 [7]，这鼓励了非接触式系统的发展。
+
+最常见的非接触式系统是基于视觉（vision-based）的 [8]-[13]。通常，需要部署一系列摄像头、红外传感器或如Kinect等深度摄像头来监控感兴趣的区域。虽然在良好照明条件和清晰视野的有利设置下可以实现高精度，但基于视觉的系统受限于可见性要求，并且还带来了隐私问题（privacy concerns），特别是在浴室和卧室等某些特定环境中。
+
+受到射频（Radio-Frequency, RF）信号可被传播环境改变这一事实的启发 [14], [15]，无线感知（wireless sensing）的概念提出了被动感知人类活动的机会，并且已经探索了许多无线技术，例如多普勒雷达（Doppler radar）和WiFi信号 [16]-[23] 来检测跌倒。然而，现有的基于RF的方法要么覆盖范围有限，要么需要在新环境中重新训练，这在商业室内FD系统中是不切实际的。我们在第二节中详细比较了不同类型的基于RF的系统。
+
+为了解决这个问题，在这项工作中，我们提出了DeFall，这是一个基于WiFi的稳健且独立于环境的FD系统。将DeFall与先前工作区分开来的关键见解是，它利用了身体速度和加速度的生理模式，而不是以前使用的解释性较差的数据驱动（data-driven）特征。注意到人体跌倒与其他日常活动经历不同的速度/加速度，我们提出利用速度和加速度的独特模式来识别跌倒。最近的工作 [24] 展示了即使在非视距（NLOS）环境中从WiFi信号被动提取速度信息的可行性，这使我们能够将DeFall建立在基于WiFi的速度估计之上。
+
+由于跌倒涉及独特的速度转换模式并持续一定时间，DeFall使用连续捕获的速度/加速度时间序列（time series）而不是瞬时值来识别跌倒事件。这可以极大地减少真实环境中不必要的误报。然而，当我们处理时间序列时，时间序列中的时间可变性带来了另一个挑战。为了适应随时间的非线性压缩或拉伸，我们应用了基于增强的动态时间规整（DTW）算法进行时间序列处理。
+
+DeFall由两个关键部分组成：1）离线模板生成阶段和2）在线决策阶段。在离线阶段，生成速度和加速度序列的代表性模板。之后，在在线阶段评估实时速度/加速度序列与模板之间的相似性以检测跌倒。由于速度和加速度是独立于静态背景环境的人体运动的固有属性，DeFall只需要一次轻量级训练，并以无监督的方式对不同的环境具有鲁棒性。同样，得益于速度估计中使用的丰富散射模型，该系统在LOS和NLOS场景下都能很好地工作。
+
+为了评估DeFall的性能，我们在典型的室内环境中的各种设置下进行了广泛的实验。我们首先使用一个尺寸和重量与真人相似的假人（dummy）在LOS和NLOS下进行了800多次跌倒实验，以验证可行性并计算检测率（DR）。我们还测试了真实人类在进行包括行走和坐下等日常室内活动时的误报率（FAR）。此外，我们应用了更多的真实人类跌倒样本来验证所提出系统的有效性。实验结果表明，DeFall对真实跌倒的DR超过95\%，FAR为1.47\%，在准确性和鲁棒性方面优于现有解决方案。本文的贡献总结如下：
+1) 据我们所知，提出的系统是第一个无设备（device-free）的跌倒检测器，它利用了从WiFi信道状态信息（CSI）估计的准确的速度和加速度时间序列。
+2) 提出的系统在LOS和NLOS场景下均能良好运行，摆脱了覆盖范围的限制，同时保护了隐私。
+3) 通过长期测试，该系统被验证对其他日常活动以及物体掉落具有鲁棒性，同时对真实跌倒保持高DR。
+4) 基于与其他现有方法的性能比较，我们的系统可以在不断变化的环境中独立工作，而无需任何重新训练。
+
+本文的其余部分安排如下。第二节回顾了相关工作。第三节介绍了DeFall的基本原理。第四节描述了系统设计和实现。提出系统的性能在第五节和第六节中进行了研究和评估。最后，第七节给出了结论性意见。
+
+
+\section{相关工作 (Related Work)}
+得益于物联网（IoT）技术和无线感知研究的快速发展，涌现出大量的无线IoT应用，包括FD系统。在本节中，我们回顾有关室内活动识别的文献，特别是针对FD的文献。现有的关于被动无线感知的工作可以根据从无线信道提取的特征分为不同的组，如表 I 所示：基于雷达的（radar-based）、基于接收信号强度指示器（RSSI-based）和基于CSI的（CSI-based）系统。
+
+% [此处预留表I]
+\begin{table}[htbp]
+\centering
+\caption{相关工作总结 (SUMMARY ON RELATED WORKS)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{p{2cm} p{4cm} p{4cm}}
+\toprule
+\textbf{方法论 (Methodology)} & \textbf{现有工作 (Existing works)} & \textbf{局限性 (Limitations)} \\
+\midrule
+\multirow{3}{2cm}{基于雷达 (Radar-based)} & 室内活动识别 [25]-[27] & 有限的检测范围 (Limited detection range) \\
+ & 跌倒检测 [16]-[19] & 无法与商用WiFi集成 (Cannot be integrated with commercial WiFi) \\
+ & & 需要专门设备 (Specialized device required) \\
+\midrule
+\multirow{3}{2cm}{基于RSSI (RSSI-based)} & 室内活动识别 [28], [29] & 粗粒度 (Coarse granularity) \\
+ & 跌倒检测 [30] & 对环境变化高度敏感 (High sensitivity to environmental changes) \\
+ & & 需要多个设备 (Multiple devices required) \\
+\midrule
+\multirow{3}{2cm}{基于CSI (CSI-based)} & 室内活动识别 [31]-[33] & 在新环境中需要重新训练 (Re-training required in new environments) \\
+ & 跌倒检测 [20]-[23] & 视距路径被阻挡时性能下降 (Performance degrades with LOS path blocked) \\
+\midrule
+\multirow{3}{2cm}{被动WiFi雷达 (PWR)} & 室内活动识别 [34] & 需要额外的外设和定向天线 (Extra peripherals and directional antennas required) \\
+ & 人体感知 [35], [36] & 多普勒特征受移动方向影响 (Doppler signature affected by moving direction) \\
+ & & 需要稳定的参考信道 (Stable reference channel required) \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+基于雷达的系统依靠家庭中不容易获得的专用设备来检测事件。它们中的许多通过评估多普勒频移（Doppler frequency shift, DFS）来推断反射体的运动，并提取微多普勒特征以识别更精细的身体运动，如活动监测 [25], [26]、手势识别 [37] 和跌倒检测器 [16], [17]。在比商用WiFi更高的发射频率下运行的毫米波（mmWave）雷达提供更好的速度分辨率并捕获不同身体部位运动的更多细节 [27], [38], [39]。此外，由于宽带而具有高分辨率的超宽带（UWB）雷达也被提出用于对室内活动进行分类并检测跌倒 [18], [19]。Mokhtari等人 [18] 提出了一种基于接收到的UWB信号的到达时间（TOA）特征提取方法。Ma等人 [19] 通过应用卷积长短期记忆（ConvLSTM）结构来实现基于UWB雷达的FD。Tian等人 [40] 结合CNN和状态机，并采用大规模数据集在各种环境中检测跌倒。然而，尽管雷达可能具有更高的范围或频率分辨率，但它们通常需要视距（LOS）才能可靠运行。因此，它们只能在非常有限的覆盖范围内检测跌倒，并且也受到额外专用的专用设备要求的限制。此外，雷达从多普勒频移得出的速度估计对于不同的移动方向是变化的，并且目标的朝向通常是预先定义的 [41]。
+
+其他一些关于活动识别和FD的工作使用商品设备。商业无线设备（如WiFi基础设施）在大多数室内空间都可用，并允许更灵活的低成本部署。Chetty等人 [35] 应用被动WiFi雷达（PWR）实现穿墙（through-the-wall）人体感知，并克服传统雷达的覆盖限制。然而，同样依赖雷达原理的PWR收集多普勒信息，因此也是方向/位置相关的，需要定向天线 [36]。
+
+另一种广泛使用的方法是使用RSSI来表征室内活动，无论是在WiFi还是其他无线设备上。例如，Gu等人 [28] 探索WiFi环境信号以获取不同活动的RSSI指纹。然而，由于RSSI测量的是多个叠加子载波的整体幅度响应，因此丢失了相位信息以及每个频率分量的详细信息。因此，由于多径衰落（multipath fading）和时间动态 [42]，它在复杂情况下会遭受严重的性能下降，限制了其在实际应用中的稳定性和可靠性。
+
+CSI测量不同频率分量上的幅度和相位信息，为传播环境提供了更细粒度的信息，并且最近在无线感知领域变得流行。与PWR的机制不同，CSI是可以从商品WiFi设备中提取的标准信息。通过分析如今主流设备上可访问的CSI，人们可以监控室内活动并检测室内事件，例如Wi-chase [31]、CRAM [32] 和TRIEDS [33]。Wang等人 [20] 设计了WiFall，这是一种基于WiFi的无干扰FD系统，它从CSI幅度信息中提取特征来检测跌倒，而RT-Fall [21] 利用相位差的功效进行活动分割和FD。FallDeFi [22] 使用传统的短时傅里叶变换（STFT）提取时频特征以感知环境变化并检测跌倒。Sensing-Fi [43] 基于WiFi信号以及地面安装的加速度计测量值（捕获地板振动）来检测跌倒。
+
+% [此处预留表II]
+\begin{table}[htbp]
+\centering
+\caption{不同的基于CSI的FD方法及其声称的性能的简要总结}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l l l l c}
+\toprule
+\textbf{参考文献 (Reference)} & \textbf{特征 (Features)} & \textbf{声称的DR} & \textbf{声称的FAR} & \textbf{环境独立} \\
+\midrule
+WiFall [20] & 方差 (Variance) & 87\% & 18\% & X \\
+RT-Fall [21] & 相位差 (Phase difference) & 91\% & 11\% & X \\
+FallDeFi [22] & 频谱图 (Spectrogram) & 94.33\% & 14.92\% & X \\
+TL-Fall [23] & 频率 (Frequency) & 86.83\% & 15.29\% & X \\
+DeFall (Ours) & 速度 (Speed) & 95.80\% & 1.47\% & \checkmark \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+不幸的是，如表 II 所示，由于上述现有基于WiFi的FD系统中提取的特征是依赖于环境的，因此这些工作中的训练分类器受到环境变化的影响，如果不降低性能就无法很好地泛化到新环境。当环境设置发生变化时，这些系统需要重新训练，这使得它们不切实际，因为每次家具放置或设备部署发生变化时，都要求用户跌倒并收集训练数据是不合适的。TL-Fall [23] 应用迁移学习来减轻环境影响并减少训练工作量，但在新环境中仍然需要轻微的重新训练，并且无法处理连续的活动，因为在信号处理之前需要进行活动分割。此外，这项工作的早期版本已发表在 [44] 中，其采样率固定，由于提议的跌倒检测系统需要高采样率，这可能不够节能。为了解决这些挑战，在这项工作中，我们提出了DeFall，它探索了跌倒的固有特征，并且只需要很小的训练开销和基于新型运动检测器的自适应采样率，它独立于环境，一旦部署在任何新环境中即可投入使用，无需任何重新训练或校准。
+
+\section{核心概念与初步理论 (Preliminaries)}
+在本节中，首先介绍跌倒事件的独特速度模式。然后，回顾了物理层CSI的定义，此外，还说明了基于CSI的运动检测（MD）和速度估计的原理。
+
+\subsection{跌倒事件的独特特征 (Distinct Characteristics of Fall Events)}
+在我们的日常生活中可能会发生不同类型的跌倒。有些是辅助跌倒（assisted falls），发生在受试者在跌倒过程中得到他人或其他支撑物体的帮助时。无辅助跌倒（unassisted falls）则是在没有任何支撑的情况下意外发生的，这是由于地板上的溢出物等外在环境因素或步态受损等内在风险因素引起的。与辅助跌倒相比，无辅助跌倒更接近自由落体，并在撞击地面的瞬间具有更大的速度，导致导致严重伤害甚至死亡的风险更高 [45]。因此，我们提出的系统主要侧重于检测无辅助跌倒，尤其是从站立姿势跌倒产生最大速度的那些跌倒。
+
+速度和加速度是通常用来描述运动的两个特征。直观地说，跌倒可以被视为一种具有异常速度和加速度的异常室内事件，因此它们都被认为是有助于区分跌倒与其他日常活动的独特特征。独特性不仅在于跌倒期间速度和加速度的绝对值，还在于它们如何随时间变化。更具体地说，当人摔倒在地时，其身体将首先经历快速的加速。一旦身体撞击地板，身体速度就会急剧下降到几乎为零。事实上，大多数意外跌倒都表现出类似的模式，这意味着通过监测速度和加速度变化来开发环境独立系统的可行性，这也是DeFall的基础。
+
+% [此处预留图1]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=0.8\columnwidth]{fig1.png}
+\vspace{4cm} % 占位符
+\caption{室内丰富散射模型 (Indoor rich-scattering model).}
+\end{figure}
+
+\subsection{从WiFi CSI进行速度估计 (Speed Estimation From WiFi CSI)}
+在无线通信中，CSI（也称为信道频率响应CFR）描述了信号从发射器（Tx）到接收器（Rx）的传播。在时间 $t$ 在频率为 $f$ 的子载波上的CSI估计可以表示为：
+\begin{equation}
+H(t, f) = \frac{Y(t, f)}{X(t, f)}
+\end{equation}
+其中 $X(t, f)$ 和 $Y(t, f)$ 是发射和接收信号。传输的WiFi信号在室内环境中的传播经历多次反射，因此，CSI包含关于信道条件的许多有用信息，这意味着我们可以通过CSI捕捉周围环境的变化。
+
+由于利用了连续速度的独特模式，基于WiFi CSI对速度进行准确可靠的估计至关重要，而由于室内传播的多径效应（multipath effects），这并非易事。一些无设备的基于CSI的速度估计器 [46]-[48] 已经被提出，它们大多利用DFS来计算人体的速度，这有几个局限性。首先，基于DFS的方法利用反射模型，假设人体被简化为单个反射体并仅产生一条主导反射路径，这在具有丰富多径传播的实际室内环境中通常不成立。其次，为了确保来自人体的直接反射路径具有足够强的能量以被感知，现有的工作仅限于LOS覆盖，因为移动的身体应该能够被Tx和Rx都“看到”。第三，如Qian等人 [46] 所指出的，由人体运动引起的DFS不仅与运动速度有关，而且取决于相对于链路的相对位置和方向。此外，基于DFS的速度估计器将CSI相位考虑在内，而商用WiFi设备上的CSI相位由于WiFi Tx和Rx之间的相位同步误差而无法准确测量 [49]。
+
+受WiSpeed [24] 的启发，在这项工作中，我们假设一个实用的丰富散射环境，如图1所示，并基于电磁波理论的统计模型估计速度，该模型仅利用CSI幅度信息。具体来说，CSI幅度可以通过CSI功率响应 $G(t,f)$ 来测量，定义为：
+\begin{equation}
+G(t,f) \triangleq |H(t,f)|^{2} = \xi(t,f) + \epsilon(t,f)
+\end{equation}
+其中 $\xi(t,f) = ||\vec{E}_{Rx}(t,f)||^{2}$，且 $\vec{E}_{Rx}(t,f)$ 表示传播的信号。$\epsilon(t,f)$ 表示加性噪声，假设 $\xi(t,f)$ 和 $\epsilon(t,f)$ 彼此独立。
+
+在 [24] 中已经表明，通过评估 $G(t,f)$ 的自相关函数（ACF），可以可靠地估计移动物体的速度。$G(t,f)$ 的理论ACF $\rho_{G}(\tau,f)$ 可以推导为：
+\begin{equation}
+\rho_{G}(\tau,f) = \frac{\sigma_{\xi}^{2}(f)}{\sigma_{\xi}^{2}(f)+\sigma_{\epsilon}^{2}(f)}\rho_{\xi}(\tau,f) + \frac{\sigma_{\epsilon}^{2}(f)}{\sigma_{\xi}^{2}(f)+\sigma_{\epsilon}^{2}(f)}\delta(\tau)
+\end{equation}
+其中 $\tau$ 是ACF的时间滞后。$\sigma_{\xi}^{2}(f)$ 和 $\sigma_{\epsilon}^{2}(f)$ 分别是 $\xi(t,f)$ 和 $\epsilon(t,f)$ 的方差。$\rho_{\xi}(\tau,f)$ 和狄拉克（Dirac）δ函数 $\delta(\tau)$ 是 $\xi(t,f)$ 和 $\epsilon(t,f)$ 的ACF。
+
+当 $\tau \neq 0$ 时，我们有 $\delta(\tau)=0$，基于电磁波的统计理论 [50]，$\rho_{G}(\tau,f)$ 可以进一步推导为：
+\begin{equation}
+\rho_{G}(\tau,f) = \sum_{u \in \{x,y,z\}} \left(C_{1}(f)\rho_{E_u}(\tau,f) + C_{2}(f)\rho_{E_u}^{2}(\tau,f)\right)
+\end{equation}
+其中 $C_{1}(f)$ 和 $C_{2}(f)$ 是由所有散射体反射的功率决定的缩放因子。$\rho_{E_u}(\tau,f)$ 是 $\vec{E}_{Rx}(t,f)$ 在u轴方向上的ACF，其中 $u \in \{x,y,z\}$。
+
+对于沿z轴以速度 $v_i$ 移动的第 $i$ 个动态散射体，散射信号表示为 $E_{iu}(t,f)$。那么，其ACF $\rho_{E_{iu}}(\tau,f)$ 在 $\{x,y,z\}$ 轴上的分量可以分别表示为以下闭式方程：
+\begin{equation}
+\begin{aligned}
+\rho_{E_{ix}}(\tau,f) &= \rho_{E_{iy}}(\tau,f) \\
+&= \frac{3}{2}\frac{\sin(kv_{i}\tau)}{kv_{i}\tau}\left(1-\frac{1}{(kv_{i}\tau)^{2}}\right) + \frac{3}{2}\frac{\cos(kv_{i}\tau)}{(kv_{i}\tau)^{2}}
+\end{aligned}
+\end{equation}
+\begin{equation}
+\rho_{E_{iz}}(\tau,f) = \frac{3}{(kv_{i}\tau)^{2}}\left(\frac{\sin(kv_{i}\tau)}{kv_{i}\tau}-\cos(kv_{i}\tau)\right)
+\end{equation}
+其中 $k$ 表示波数。直观上，上述方程建立了ACF $\rho_{G}(\tau,f)$ 与运动存在以及移动速度之间的关系。
+
+% [此处预留图2: Spatial ACF]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig2.png}
+\vspace{4cm} % 占位符
+\caption{电磁波分量的空间ACF及其微分 (Spatial ACF and its differential for EM wave components).}
+\end{figure}
+
+\subsubsection{$\rho_{G}(\tau,f)$ 与运动存在之间的关系}
+由公式(3)可知，如果在WiFi信号传播环境中存在运动，随着 $\tau \rightarrow 0$，由于白噪声的性质和运动的连续性 [51]，我们有 $\delta(\tau)=0$ 且 $\rho_{\xi}(\tau,f) \rightarrow 1$。结果，当 $\tau \rightarrow 0$ 时，$\rho_{G}(\tau,f) \rightarrow \left(\sigma_{\xi}^{2}(f) / [\sigma_{\xi}^{2}(f)+\sigma_{\epsilon}^{2}(f)]\right) > 0$。如果没有运动，环境是静态的，方差 $\sigma_{\xi}^{2}(\tau,f)=0$，因此当 $\tau \rightarrow 0$ 时 $\rho_{G}(\tau,f)=0$。因此，$\lim_{\tau \rightarrow 0}\rho_{G}(\tau,f)$ 的值可以指示周围环境中运动的存在。
+
+\subsubsection{$\rho_{G}(\tau,f)$ 与移动速度之间的关系}
+对于所有动态散射体以相同的速度和方向移动的简单情况，不失一般性地，我们可以假设移动方向在z轴上，并得到如公式(4)的 $\rho_{G}(\tau,f)$，其分量如(5)和(6)所示。每个分量及其微分可分别在图2(a)和(b)中可视化。观察到 $\Delta\rho_{E_u}^{2}(\tau,f), \forall u \in \{x,y\}$ 的第一个局部波谷（first local valley）恰好也是 $\Delta\rho_{G}(\tau)$ 的第一个局部波谷，我们可以通过定位 $\Delta\rho_{G}(\tau,f)$ 的第一个局部波谷来提取移动散射体的速度信息。图2(c)展示了一个“行走”事件随时间变化的 $\Delta\rho_{G}(\tau)$ 的例子，其中第一个波谷位置用黑点标记。图2(d)展示了图2(c)中 $\Delta\rho_{G}(\tau)$ 的一个快照。
+
+在Rx和Tx覆盖范围内有单个目标（例如，一个人）移动的情况下，动态信号由人体躯干反射的部分主导。因此，合理假设在这种情况下，所有动态散射体都以相同的速度和方向移动，我们可以使用提出的方法估计人体的速度，从而进一步检测跌倒。
+
+\section{DeFall 系统设计 (DeFall Design)}
+在本节中，我们详细描述了DeFall系统中的主要模块。如图3所示，该系统主要由两个阶段组成。在离线阶段，通过在室内丰富散射环境的无线电传播中应用统计模型，从WiFi CSI估计跌倒速度。之后，执行基于DTW的算法以生成典型人体跌倒的代表性模板。然后，在在线阶段通过评估实时速度/加速度估计模式与代表性模板之间的相似性来检测跌倒事件。此外，作为预判程序，在FD模块之前添加了一个在线MD（运动检测）模块。
+
+% [此处预留图3: DeFall 概览图]
+\begin{figure*}[htbp]
+\centering
+% \includegraphics[width=\textwidth]{fig3.png}
+\vspace{6cm} % 占位符
+\caption{DeFall 系统概览 (Overview of DeFall).}
+\end{figure*}
+
+\subsection{模板生成阶段 (Template-Generating Stage)}
+在离线模板生成阶段，随机选取 $M$ 个跌倒事件的CSI序列，并基于对应的估计速度序列构建一个“模板数据库” $\mathbb{S}=\{S_{1},S_{2},...,S_{M}\}$。
+
+\subsubsection{构建通用模板的挑战}
+为了构建单一的代表性模板，我们对数据库执行“平均（average）”。由于收集的数据都是时间序列，直接的逐点匹配和平均的结果将很容易受到序列偏移和错位（misalignment）的影响。因此，距离测量操作以及序列对齐将在DTW空间 [52] 中执行。然而，跌倒事件之前或之后可能存在其他活动的冗余速度段，而经典的DTW算法对序列的端点很敏感。因此，需要仔细定义序列的端点，需要进行模板数据库清理。
+
+\subsubsection{模板数据库清理 (Template Database Cleaning)}
+为了消除冗余同时适应事件实例中可能的变化，我们借助于带限放宽的分段局部归一化DTW（band-relaxed SLN-DTW）[53]。SLN-DTW的基本思想是通过动态规划从剩余序列 $(S_{1}, S_{2}, ..., S_{x-1}, S_{x+1}, ..., S_{M})$ 中检测出客观序列 $S_{x}$ 与测试序列 $S_{y}$ 之间的低失真局部对齐 [53]。最初的SLN-DTW旨在在测试流 $S_{y}$ 中匹配目标序列 $S_{x}$，前提是 $S_{x}$ 与目标事件完全重合，这是不合适的，因为 $\mathbb{S}$ 中收集的任何序列都可能包含冗余。因此，应用了 [53] 中的带限放宽SLN-DTW。它放宽了SLN-DTW的边界约束，从而可以自适应对齐 $S_{x}$ 的起点和终点，并可靠地检索公共部分。
+
+具体来说，令 $i$ 和 $j$ 分别代表客观序列 $S_{x}$ 和测试序列 $S_{y}$ 的索引。我们可以构建一个网格 $[1,...,i,...,L_{1}] \times [1,...,j,...,L_{2}]$，其中 $L_{1}$ 和 $L_{2}$ 表示 $S_{x}$ 和 $S_{y}$ 的长度。在放宽边界的情况下，最佳规整路径的起点允许位于起始带 $\{(i,j) | i \in [1, B_{s}]\}$ 中，而终点则选在结束带 $\{(i,j) | i \in [B_{e}, L_{1}]\}$ 中。然后，可以生成累积距离矩阵 $D$ 和长度矩阵 $L$，其中矩阵的元素 $D(i,j)$ 和 $L(i,j)$ 代表从起点 $(i_s, j_s)$ 到 $(i,j)$ 的总累积距离和路径长度。代价函数（cost function）定义为比率 $C(i,j) = D(i,j)/L(i,j)$。应用于模板数据库清理的带限放宽SLN-DTW的过程可以总结如下。
+
+\textbf{步骤 1 (初始化距离矩阵 D 和长度矩阵 L):}
+对于 $\forall(i,j)$ 其中 $1 \le i \le B_{s}, 1 \le j \le L_{2}$，我们有
+\begin{equation}
+\begin{cases}
+D(i,j) = d(i,j) \\
+L(i,j) = 1
+\end{cases}
+\end{equation}
+其中 $d(i,j)$ 是 $S_{x}$ 中第 $i$ 个点和 $S_{y}$ 中第 $j$ 个点之间的欧几里得距离。
+
+\textbf{步骤 2 (迭代):}
+对于 $\forall(i,j)$ 其中 $1 \le i \le B_{s}$ 和 $1 \le j \le L_{2}$，最小化 $C(i,j) = \min_{(u,v)} \left([d(i,j)+D(u,v)]/[L(u,v)+1]\right)$，其中 $(u,v) \in \{(i,j), (i-1,j), (i,j-1), (i-1,j-1)\}$。对于每次迭代，相应的 $D$ 和 $L$ 更新为：
+\begin{equation}
+D(i,j) = \begin{cases} d(i,j), & \text{if } (u,v)=(i,j) \\ D(u,v)+d(i,j), & \text{otherwise} \end{cases}
+\end{equation}
+\begin{equation}
+L(i,j) = \begin{cases} 1, & \text{if } (u,v)=(i,j) \\ L(u,v)+1, & \text{otherwise} \end{cases}
+\end{equation}
+
+对于 $\forall(i,j)$ 其中 $B_{s} < i \le L_{1}$，最小化 $C(i,j) = \min_{(u,v)} \left([d(i,j)+D(u,v)]/[L(u,v)+1]\right)$，其中 $(u,v) \in \{(i-1,j), (i,j-1), (i-1,j-1)\}$。对于每次迭代，将相应的 $D$ 和 $L$ 更新为：
+\begin{equation}
+\begin{cases}
+D(i,j) = D(u,v)+d(i,j) \\
+L(i,j) = L(u,v)+1
+\end{cases}
+\end{equation}
+
+\textbf{步骤 3 (回溯 Trace Back):}
+对于 $k \in [B_{e}, L_{1}]$ 找到最小的 $C(k,j)$，并沿着路径 $(i,j)$ 回溯，直到 $i=B_{s}$，以提取横跨中心带 $\{(i,j) | i \in [B_{s}, B_{e}]\}$ 的最优路径。之后，如果到下一个点的代价小于当前代价，即 $C(i_{next}, j_{next}) < C(i_{now}, j_{now})$，继续回溯。否则，停止并输出最优路径。
+
+在每两个速度序列之间应用带限放宽SLN-DTW以提取它们的公共部分。因此，对于每个客观序列 $S_{x} \in \{S_{1}, S_{2}, ..., S_{M}\}$，有 $M-1$ 个可能截断段，带有 $M-1$ 个起始索引 $P_{x,s}$ 和 $M-1$ 个结束索引 $P_{x,e}$。索引位于 $[\text{med}(P_{x,s}), \text{med}(P_{x,e})]$ 中的 $S_{x}$ 部分被视为样本 $S_{x}$ 中跌倒事件的清洗后的速度序列，其中 $\text{med}(P_{x,s})$ 和 $\text{med}(P_{x,e})$ 分别是起始索引和结束索引的中位数。这样，模板数据库就被精炼（refined）为 $\hat{\mathbb{S}} = \{\hat{S}_{1}, \hat{S}_{2}, ..., \hat{S}_{M}\}$。图4(a) 展示了应用SLN-DTW后清理出的速度序列实例。
+
+% [此处预留图4]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig4.png}
+\vspace{4cm} % 占位符
+\caption{在序列清理和跌倒检测中应用 SLN-DTW 的原理。(a) 带限放宽SLN-DTW提取模板的结果。(b) SLN-DTW的实时检测结果。}
+\end{figure}
+
+\subsubsection{在DTW测度空间中平均 (Averaging in the DTW Measure Space)}
+精炼后的数据库 $\hat{\mathbb{S}}$ 中的 $M$ 个清理后的速度序列随后被缩放至相同长度，并在DTW测度空间中进行平均，以构建单一的代表性轮廓。寻找最佳平均值的问题可以表述为一个优化问题：给定一组模板时间序列 $\hat{\mathbb{S}} = \{\hat{S}_{1}, \hat{S}_{2}, ..., \hat{S}_{M}\}$，平均序列 $\overline{S}$ 是使 $\overline{S}$ 与 $\hat{\mathbb{S}}$ 中所有序列之间DTW距离的平方和最小的序列：
+\begin{equation}
+\overline{S} = \arg \min \sum_{x=1}^{M} DTW^{2}(S, \hat{S}_{x})
+\end{equation}
+两个序列 $A$ 和 $B$ 的DTW距离 $DTW(A,B)$ 定义为沿最优规整路径的序列 $A$ 和序列 $B$ 之间的欧几里得距离，如下所示：
+\begin{equation}
+DTW(A,B) = \sqrt{\sum_{p=1}^{|P^{*}|} ||A[a_{p}]-B[b_{p}]||^{2}}
+\end{equation}
+其中 $a_p$ 和 $b_p$ 是 $A$ 和 $B$ 中与路径 $P^*$ 上第 $p$ 个点相关的索引。
+
+为了解决最小化问题 (11) 并获得最佳平均序列，实施了DTW重心平均（DBA）算法 [54]。DBA 是一种迭代算法，遵循期望最大化（expectation-maximization）方案，在每次迭代时改进平均序列 $\overline{S}$，其收敛性已在 [55] 中证明。由DBA产生的最佳速度时间序列 $\overline{S}$ 被认为是速度模板。
+
+除了速度外，加速度从另一个不同的角度描绘了跌倒过程中的运动。为了获得跌倒事件的更全面描述，我们从速度模板 $\overline{S}$ 推导出加速度序列 $\overline{S}^{\prime}$，并通过点对点缝合（stitching）将它们组合以生成二维模板 $\overline{S}_{2D}$。利用二维组合模板 $\overline{S}_{2D}$ 而非单一的一维模板 $\overline{S}$ 或 $\overline{S}^{\prime}$ 的有效性将在第六节讨论。
+
+\subsection{决策阶段 (Decision-Making Stage)}
+如第三节-A部分所述，跌倒事件经历独特的速度和加速度模式，这可用于将跌倒与其他室内日常活动区分开来。然而，速度估计需要高采样率 [24]。为了节省能量和计算成本，在决策制定阶段，除了FD模块外，还包含一个低速率的MD模块。
+
+\subsubsection{运动检测模块 (Motion Detection Module)}
+如第三节-B部分所示，$\lim_{\tau \rightarrow 0}\rho_{G}(\tau,f)$ 可被用作MD的标准。在实践中，由于采样率的限制，我们只能使用 $\rho_{G}(\tau=1/F_{s},f)$ 来近似 $\tau \rightarrow 0$。为了有效节能，添加了具有低采样率的MD模块作为FD模块之前人类运动的预检测，并且FD模块仅在存在运动时触发。
+
+\subsubsection{跌倒检测模块 (Fall Detection Module)}
+在FD模块中，我们在传入的CSI流上应用滑动窗口（sliding window）$W$。从窗口 $W$ 中的CSI序列估计测试速度序列 $T$。随后从 $T$ 导出加速度序列 $T^{\prime}$，然后进行组合操作以形成二维模式 $T_{2D}$。
+
+然后，通过将测试时间序列 $T_{2D}$ 与模板 $\overline{S}_{2D}$ 进行比较来检测跌倒事件。这两个序列相应的相似性在DTW空间中进行评估，以适应时域中两个序列的未对齐。由于涉及不同人的跌倒事件可能经历不同的持续时间，由固定长度的滑动窗口分割的序列也可能在目标事件之前或之后包括其他活动，这不能通过传统DTW来处理，因此，我们再次采用SLN-DTW [53] 来定位事件的开始和结束实例，如图4(b)所示。将模板 $\overline{S}_{2D}$ 视为客观序列并将 $T_{2D}$ 视为测试序列，我们将 $\overline{S}_{2D}$ 的起始和结束带的长度设置为1，因为模板 $\overline{S}_{2D}$ 已经被清理过。
+
+通过实施SLN-DTW，评估了测试流 $T_{2D}$ 和 $\overline{S}_{2D}$ 的相似性。当测试序列和参考模板之间的DTW距离小于预设的经验阈值 $\gamma$ 时，测试序列 $T_{2D}$ 与参考跌倒模板 $\overline{S}_{2D}$ 具有相似模式，检测器将发出跌倒发生的警报，其中 $\gamma$ 根据实验以及对FAR和DR的要求根据经验确定。
+
+在实时监控中，MD模块以较低的采样率保持运行，只要检测到运动，FD模块就开始以高采样率工作以估计速度并检测跌倒事件。当 $T_{2D}$ 和 $\overline{S}_{2D}$ 之间的相似性在足够长的时间内保持较低（即DTW距离大于 $\gamma$）时，它切换回MD模块以节省功耗和计算成本。
+
+\section{实验结果 (Experimental Results)}
+为了构建我们的DeFall系统，我们使用两台配备现成WiFi网卡（Intel 5300）的笔记本电脑（Thinkpad T420）作为Tx和Rx，如图5(a)所示。我们使用Linux 802.11n CSI tool [56] 来收集CSI测量值。每一台设备配备三根全向天线，每对天线上的CSI流共有30个子载波。默认情况下，系统在WLAN信道153上运行，载波频率为5.805 GHz，带宽为40 MHz。在MD模块中，采样率设置为30 Hz。对于FD模块，为了获得更好的速度估计分辨率以捕捉高速运动，Tx以1500 Hz的信道采样率发送探测帧。
+
+% [此处预留图5]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig5.png}
+\vspace{3cm} % 占位符
+\caption{(a) 用于数据收集的设备; (b) 真实跌倒的示例，包括向前、侧向和向后跌倒。}
+\end{figure}
+
+\subsection{实验环境 (Experimental Environments)}
+我们在不同条件（如LOS和NLOS）、办公室和家庭环境的不同地点以及涉及多名志愿者的情况下，通过广泛的实验对DeFall进行评估。详细设置如图6所示，标出了Tx、Rx和跌倒者的位置。环境1[图6(a)]中类人假人的数据用于模板生成以及检测算法验证。然后，志愿者在所有环境中执行真实的跌倒/非跌倒活动，以进一步评估环境多样性、用户多样性以及跌倒类型的影响。真实情况通过视频记录。
+
+在每个环境中，我们改变Tx/Rx之一的位置，并在LOS和NLOS场景下进行不同位置布置的实验。在LOS场景下，Tx和Rx都可以“看到”目标，而在NLOS情况下，目标和一台或多台设备之间不存在任何直接链路，这在室内环境中非常普遍。具体来说，在环境1和环境3中，Tx在LOS/NLOS条件下部署在位置 $Tx_1/Tx_2$。在环境2中，只有 $Rx_1$ 在LOS场景下，而其他部署对应于NLOS情况。
+
+% [此处预留图6: 实验环境图]
+\begin{figure*}[htbp]
+\centering
+% \includegraphics[width=\textwidth]{fig6.png}
+\vspace{5cm} % 占位符
+\caption{实验环境。(a) 环境 1：典型办公环境。(b) 环境 2：典型办公室内的不同房间和布置。(c) 环境 3：典型公寓环境。}
+\end{figure*}
+
+\subsection{数据收集 (Data Collection)}
+数据收集在不同日子进行，持续了三个多月，期间周围传播环境不断变化，包括家具布置的改变、门窗的开关等。为了验证DeFall的可行性，我们首先使用类人假人收集模板数据和测试数据。之后，进一步研究真人跌倒样本，以评估系统的有效性。
+
+在验证实验中，我们同时考虑了单独的跌倒事件以及紧随跌倒之后的连续运动。“站立然后跌倒（Stand-then-fall）”表示从静止的站立姿势跌倒，通过首先让假人直立然后使其自由跌落来实现；而“行走然后跌倒（walk-then-fall）”表明跌倒发生在连续行走动作之后，要求实验者以正常速度在站立的假人周围行走，然后使其跌倒。LOS和NLOS场景下“行走然后跌倒”和“行走然后坐下（walk-then-sit）”的速度/加速度模式实例见图7，其中我们可以观察到跌倒与坐下和行走等其他活动之间的截然不同的模式。经过长期数据收集，共有846个假人跌倒样本和814个用于验证的非跌倒样本，如表 III 所示。
+
+为了证明我们的系统可以在现实世界中运行良好，我们进一步基于真人跌倒评估其性能。我们首先让三名志愿者（一女两男）参与多次长期实验，以研究环境多样性、环境运动的存在以及跌倒类型（向前、向后和侧向跌倒）的影响。为了研究用户异质性的影响，我们让另外七名不同年龄的志愿者执行不同的跌倒动作。
+
+% [此处预留图7]
+\begin{figure*}[htbp]
+\centering
+% \includegraphics[width=\textwidth]{fig7.png}
+\vspace{6cm} % 占位符
+\caption{“行走然后跌倒”和“行走然后坐下”的速度和加速度模式实例。}
+\end{figure*}
+
+\subsection{生成的模板 (Generated Templates)}
+在离线模板生成阶段，我们基于假人的跌倒样本构建模板数据集。在DBA算法中有两个因素需要选择，即模板数据库的大小和迭代次数。对这两个因素的研究见图8。如图8(a)所示，随着模板数据库规模增加到25，平均DTW距离变得更加稳定；而在图8(b)中，它在约15次迭代后收敛。因此，迭代次数和模板数据库大小分别合理设置为20和40。
+
+经过提炼和平均生成的模板如图9所示。正如我们所观察到的，模板具有与预期相同的趋势。速度首先上升到峰值然后下降，而加速度首先为正然后变为负。此外，可以发现LOS和NLOS的模板高度一致。由于DeFall中的速度估计基于丰富散射模型，只要目标在无线电覆盖范围内，系统就能使用LOS或NLOS链路准确捕获速度，不仅保留平均速度，还保留精确的速度变化。由于LOS和NLOS场景之间的高度一致性，我们同时使用LOS和NLOS数据生成模板，并在检测阶段应用总体模板。
+
+% [此处预留图8 和 图9]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig8.png}
+\vspace{4cm} % 占位符
+\caption{DBA因素的调查。(a) DBA算法中平均DTW距离与样本数的关系。(b) DBA算法中平均DTW距离与迭代次数的关系。}
+\end{figure}
+
+\begin{figure*}[htbp]
+\centering
+% \includegraphics[width=\textwidth]{fig9.png}
+\vspace{4cm} % 占位符
+\caption{模板。(a) 速度模板。(b) 加速度模板。(c) 二维模板。}
+\end{figure*}
+
+\subsection{性能评估 (Performance Evaluation)}
+\subsubsection{评估指标}
+系统性能的评估指标是DR（检测率）和FAR（误报率）。DR定义为正确检测到的跌倒次数占所有跌倒次数的百分比：
+\begin{equation}
+DR = \frac{\text{\# of detected falls}}{\text{\# of total falls}}
+\end{equation}
+而误报率（简称为FAR）是被误认为跌倒的非跌倒次数占所有非跌倒次数的百分比：
+\begin{equation}
+FAR = \frac{\text{\# of wrongly detected non falls}}{\text{\# of total non falls}}
+\end{equation}
+
+\subsubsection{接收者操作特性曲线 (ROC Curve)}
+决策阶段的阈值 $\gamma$ 在确定跌倒事件和非跌倒事件之间的边界中起着重要作用，因此必须仔细选择。为了评估DeFall的性能，我们并没有直接提出特定的阈值，而是首先计算了各种阈值下的DR和FAR，并生成了如图10(a)所示的总体接收者操作特性（ROC）曲线。我们还分别研究了LOS和NLOS场景中的ROC曲线。如我们所见，DR和FAR之间存在权衡。如果 $\gamma$ 小，则达到标准的速度序列往往较少，即 $\gamma$ 越小，DR越低，同时也能获得较低的FAR。请注意，LOS和NLOS的ROC曲线相互重叠。而且，它们都与整体ROC趋势高度相似，验证了所提出系统在LOS/NLOS场景中的一致性。
+
+\subsubsection{基于DTW的模式匹配的有效性}
+在之前的工作WiSpeed [24]中，应用了简单的基于阈值的方法来检测跌倒，并提出了两个特征：1) 0.5秒内的最大速度和 2) 最大加速度变化。在DeFall中，我们使用与WiSpeed相同的基于CSI的速度估计器，但通过添加基于DTW的模式匹配来进行决策，从而提高了检测性能。为了显示基于DTW的检测模块的有效性，我们还通过同时调整这两个特征的边界来获得WiSpeed的ROC曲线，并将其与DeFall进行比较，如图10(b)所示。如图10(b)所示，在相同的FAR水平下，DeFall的DR高于WiSpeed。DeFall的ROC曲线下的面积（AUC）也更大，证明了更好的性能。特别是，当FAR小于1.5\%时，DeFall仍可实现超过95\%的高DR，而WiSpeed相应的DR下降到低于75\%的水平。
+
+% [此处预留图10: ROC曲线]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig10.png}
+\vspace{4cm} % 占位符
+\caption{ROC 曲线。(a) 不同场景。(b) 与WiSpeed中基于阈值的方法比较。}
+\end{figure}
+
+\subsection{对室内活动的鲁棒性 (Robustness to Indoor Activities)}
+对于FD系统来说，DR非常关键，因为漏检的风险很高。另一方面，FAR也必不可少，因为在实际中大部分时间都在执行其他日常活动。因此，优选在保持合理DR的同时产生低FAR的系统。在这项工作中，选择产生总体FAR 1.47\%的阈值用于进一步的系统评估，相应的总体DR为97.28\%。
+
+所有类型事件的DR和FAR结果汇总在表 III 中。根据结果，DeFall在LOS和NLOS场景下都成功地实现了高DR和低FAR。比较不同跌倒事件的结果，我们可以注意到“站立然后跌倒”事件的DR高于“行走然后跌倒”事件，因为“行走然后跌倒”可能会在跌倒开始时对速度估计引入干扰。同样，在非跌倒事件中，由于“坐下”经历加速度然后减速，这比“行走”更类似于跌倒模式，可以观察到“坐下”的FAR略高于“行走”。
+
+我们实施了WiFall [20] 和FallDeFi [22] 进行对比研究。WiFall基于CSI幅度随时间的变化提取七个不同的特征进行分类，而FallDeFi从STFT频谱图和功率猝发曲线（PBC）中选择特征。为了进行公平的比较，我们优化了这两项工作中的参数以适应我们的数据集。我们应用40个跌倒样本在DeFall中生成模板，同时使用80个样本（40个跌倒和40个非跌倒）在WiFall和FallDeFi中训练分类器。表 III 中的结果证明，DeFall的总体DR较高（比WiFall高24.7\%，比FallDeFi高9.69\%），FAR较低（比WiFall低15.98\%，比FallDeFi低9.96\%），优于WiFall和FallDeFi。此外，在LOS和NLOS场景下，DeFall在相应的DR和FAR方面也表现得更好。这种性能提升的原因可归结于DeFall提取的环境无关的速度信息，以及适应连续活动的基于DTW的模式匹配。
+
+% [此处预留表 III]
+\begin{table*}[htbp]
+\centering
+\caption{与 WIFALL 和 FALLDEFI 的比较结果 (COMPARISON RESULTS WITH WIFALL AND FALLDEFI)}
+\resizebox{\textwidth}{!}{
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{场景 (Scenario)} & \textbf{事件 (Events)} & \textbf{数量 (Number)} & \textbf{DR/FAR (DeFall)} & \textbf{DR/FAR (WiFall)} & \textbf{DR/FAR (FallDeFi)} \\
+\midrule
+\multirow{4}{*}{LOS} & 跌倒 (Fall) & & & & \\
+ & - 站立然后跌倒 (Stand-then-Fall) & 424 & 97.40\% & \multirow{2}{*}{75.71\%} & \multirow{2}{*}{89.58\%} \\
+ & - 行走然后跌倒 (Walk-then-Fall) & 94 & 95.74\% & & \\
+ & 非跌倒 (non-Fall) & & & & \\
+ & - 行走 (Walking) & 167 & 0.00\% & \multirow{2}{*}{16.77\%} & \multirow{2}{*}{12.79\%} \\
+ & - 坐下 (Sitting down) & 177 & 2.82\% & & \\
+\midrule
+\multirow{4}{*}{NLOS} & 跌倒 (Fall) & & & & \\
+ & - 站立然后跌倒 (Stand-then-Fall) & 270 & 98.15\% & \multirow{2}{*}{70.37\%} & \multirow{2}{*}{84.45\%} \\
+ & - 行走然后跌倒 (Walk-then-Fall) & 58 & 94.83\% & & \\
+ & 非跌倒 (non-Fall) & & & & \\
+ & - 行走 (Walking) & 212 & 0.47\% & \multirow{2}{*}{15.09\%} & \multirow{2}{*}{10.43\%} \\
+ & - 坐下 (Sitting down) & 258 & 2.33\% & & \\
+\midrule
+\textbf{总体 (Overall)} & & & \textbf{97.28\% / 1.47\%} & \textbf{72.58\% / 17.45\%} & \textbf{87.59\% / 11.43\%} \\
+\bottomrule
+\end{tabular}
+}
+\end{table*}
+
+为了考虑到所有可能的日常活动并在实践中测试系统的鲁棒性，我们在同一个公寓[图6(c)]中进一步运行系统四天。具体来说，我们部署了两对收发器来分别覆盖主要的活动区域——客厅和餐厅。参与者每天都待在公寓里，并且可以在监控区域内进行任何日常活动。测试期间没有跌倒发生。我们将相同的模板和检测算法应用于收集到的速度序列。长期连续测试的实验结果见图11。每秒输出一次决定并统计相应的误报。在四天的测试中，客厅和餐厅总共只有12次和19次误报。平均而言，我们每天有3次和6.3次误报，考虑到所涉及的复杂日常活动，这是可以接受的。
+
+% [此处预留图11: 长期公寓测试]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig11.png}
+\vspace{3cm} % 占位符
+\caption{在公寓环境中的长期测试 (Long-term testing in an apartment environment).}
+\end{figure}
+
+\subsection{对坠落物体的鲁棒性 (Robustness to Falling Objects)}
+存在可能导致误报的类似跌倒的事件，例如椅子的跌落和将小物体掉落到地面。为了测试系统抵御这些事件干扰的鲁棒性，对具有不同尺寸和不同材料的物体进行了广泛的坠落实验。结果列在表 IV 中，表明所有的FAR均为0.0\%，验证了DeFall的鲁棒性。
+
+% [此处预留表 IV]
+\begin{table}[htbp]
+\centering
+\caption{坠落物体的影响 (IMPACT OF FALLING OBJECTS)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l l l c}
+\toprule
+\textbf{物体 (Objects)} & \textbf{材料 (Material)} & \textbf{尺寸/重量 (Size/Weight)} & \textbf{FAR} \\
+\midrule
+瓶子 (Bottle) & 塑料, 水 & 0.5kg & 0.0\% \\
+包 (Bag) & 尼龙 & 1kg & 0.0\% \\
+盘子 (Plate) & 塑料 & $Radius=12cm$ & 0.0\% \\
+盘子 (Plate) & 金属 & $Radius=10cm$ & 0.0\% \\
+书 (Book) & 纸张 & $22cm \times 18cm$ & 0.0\% \\
+盒子 (Box) & 纸板 & $17cm \times 17cm \times 25cm, 0.8kg$ & 0.0\% \\
+椅子 (Chair) & 木材 & $50cm \times 40cm \times 58cm, 3kg$ & 0.0\% \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{跌倒的类型 (Types of Falls)}
+本节我们研究跌倒方向的影响：向前、向后和侧向。结果总结在表 V 中，系统可以实现95.00\%以上的DR。提出的方法独立于移动/跌倒方向。
+
+% [此处预留表 V]
+\begin{table}[htbp]
+\centering
+\caption{不同跌倒类型的 DR (DRS ON DIFFERENT FALL TYPES)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l c c c c}
+\toprule
+ & \textbf{向前 (Forward)} & \textbf{向后 (Backward)} & \textbf{侧向 (Lateral)} & \textbf{平均 (Average)} \\
+\midrule
+用户 1 & 95.56\% & 96.67\% & 94.44\% & 95.56\% \\
+用户 2 & 94.44\% & 96.67\% & 93.33\% & 94.81\% \\
+用户 3 & 97.78\% & 95.56\% & 97.78\% & 97.04\% \\
+\textbf{平均} & \textbf{95.56\%} & \textbf{96.67\%} & \textbf{95.19\%} & \textbf{95.80\%} \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{环境多样性 (Environment Diversity)}
+如表 VI 和表 VII 所示，DeFall对不同环境具有高度鲁棒性，并在跨环境测试时明显优于WiFall和FallDeFi。
+
+% [此处预留表 VI 和 表 VII]
+\begin{table}[htbp]
+\centering
+\caption{各种环境下的 DR (DRS IN VARIOUS ENVIRONMENTS)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l c c c c c c c c c}
+\toprule
+ & \multicolumn{2}{c}{\textbf{Env 1}} & \multicolumn{4}{c}{\textbf{Env 2}} & \multicolumn{3}{c}{\textbf{Env 3}} \\
+\cmidrule(r){2-3} \cmidrule(lr){4-7} \cmidrule(l){8-10}
+ & \textbf{LOS} & \textbf{NLOS} & \textbf{LOS} & \multicolumn{3}{c}{\textbf{NLOS}} & \textbf{LOS} & \multicolumn{2}{c}{\textbf{NLOS}} \\
+ & \textbf{Tx} & \textbf{Tx} & \textbf{Rx} & \textbf{Rx} & \textbf{Rx} & \textbf{Rx} & \textbf{Tx} & \textbf{Tx} & \textbf{Tx} \\
+\midrule
+Loc 1 & 97.78\% & 95.56\% & 100\% & 97.78\% & 91.11\% & 95.56\% & 93.33\% & 95.56\% & 97.78\% \\
+Loc 2 & 97.78\% & 95.56\% & 100\% & 100\% & 93.33\% & 93.33\% & 91.11\% & 97.78\% & 95.56\% \\
+Loc 3 & - & - & 100\% & 97.78\% & 97.78\% & 97.78\% & - & - & - \\
+\textbf{平均} & \textbf{97.78\%} & \textbf{95.56\%} & \textbf{100\%} & \textbf{98.89\%} & \textbf{94.07\%} & \textbf{95.56\%} & \textbf{92.59\%} & \textbf{97.78\%} & \textbf{96.30\%} \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{环境变化的影响 (IMPACT OF ENVIRONMENTAL CHANGES)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l l c c c}
+\toprule
+\textbf{训练/模板} & \textbf{测试} & \textbf{DR (DeFall)} & \textbf{DR (WiFall)} & \textbf{DR (FallDeFi)} \\
+\midrule
+Env 1 & Env 1 & 96.67\% & 72.22\% & 90.00\% \\
+LOS in Env 1 & NLOS in Env 1 & 95.56\% & 53.33\% & 82.22\% \\
+Env 1 & Env 2 & 95.37\% & 56.11\% & 81.30\% \\
+Env 1 & Env 3 & 96.67\% & 52.78\% & 76.11\% \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{用户多样性 (User Diversity)}
+结果汇总在表 VIII 中。没有证据表明检测性能与身高和体重呈单调关系。
+
+% [此处预留表 VIII]
+\begin{table}[htbp]
+\centering
+\caption{不同用户的 DR (DRS OF DIFFERENT USERS)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l c c c c c c c c c c}
+\toprule
+ & \textbf{U1} & \textbf{U2} & \textbf{U3} & \textbf{U4} & \textbf{U5} & \textbf{U6} & \textbf{U7} & \textbf{U8} & \textbf{U9} & \textbf{U10} \\
+\midrule
+\textbf{DR} & 95.56\% & 94.81\% & 97.04\% & 91.67\% & 97.22\% & 94.44\% & 97.22\% & 100\% & 94.44\% & 97.22\% \\
+\textbf{体重(kg)} & 77 & 50 & 84 & 70 & 62 & 60 & 90 & 70 & 91 & 53 \\
+\textbf{身高(cm)} & 174 & 166 & 168 & 172 & 175 & 169 & 178 & 171 & 170 & 160 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{环境运动的影响 (Impact of Ambient Motion)}
+在表 IX 中研究了环境运动。由于系统旨在保护独居老人，第二人的存在即使引起轻微性能下降，也并不影响系统的整体可用性。
+
+% [此处预留表 IX]
+\begin{table}[htbp]
+\centering
+\caption{带环境运动的检测结果 (DETECTION RESULTS WITH AMBIENT MOTION)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l c c c c c}
+\toprule
+ & \multicolumn{4}{c}{\textbf{w/ 其他移动人员}} & \textbf{w/o 其他移动人员} \\
+\cmidrule(lr){2-5} \cmidrule(l){6-6}
+ & \multicolumn{2}{c}{\textbf{轻微运动}} & \multicolumn{2}{c}{\textbf{剧烈运动}} & \\
+ & 3-5m & >5m & 3-5m & >5m & \\
+\midrule
+\textbf{LOS} & 12/15 & 15/15 & 8/15 & 15/15 & 15/15 \\
+\textbf{NLOS} & 13/15 & 15/15 & 6/15 & 14/15 & 15/15 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{覆盖范围 (Coverage)}
+我们在大厅测试覆盖范围。如图12和表10、图13所示，随着测试目标与设备间距离的增加，DR和FAR都会有所下降。
+
+% [此处预留图12, 表 X, 图 13]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig12.png}
+\vspace{4cm} % 占位符
+\caption{分析覆盖范围的设置。(a) 设置1：NLOS场景。(b) 设置2：LOS场景。(c) 设置3：LOS场景。}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{设置 1 下的 DR 和 FAR}
+\begin{tabular}{c c c}
+\toprule
+ & \textbf{DR} & \textbf{FAR} \\
+\midrule
+A & 95.45\% & 1.28\% \\
+B & 91.30\% & 1.33\% \\
+C & 95.45\% & 2.56\% \\
+D & 90.91\% & 0.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig13.png}
+\vspace{4cm} % 占位符
+\caption{设置 2 和设置 3 下的 DR 和 FAR。}
+\end{figure}
+
+\section{讨论 (DISCUSSION)}
+\subsection{二维空间的必要性 (Necessity of 2-D Space)}
+如图14(a)所示，二维合并模板优于单一的独立模板，因为它提供了事件更全面的描述。
+
+\subsection{采样率的影响 (Impact of Sampling Rate)}
+如图14(b)所示，降低采样率会导致DeFall性能下降。因为分辨率降低引入了更多的估计误差。
+
+% [此处预留图14, 图15]
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig14.png}
+\vspace{4cm} % 占位符
+\caption{ROC曲线。(a) 二维模板与一维独立模板的比较。(b) 不同采样率的影响。}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+% \includegraphics[width=\columnwidth]{fig15.png}
+\vspace{4cm} % 占位符
+\caption{最大速度分布及各区间DR/FAR。(a) 基于最大速度的分布。(b) 每个最大速度区间内的DR/FAR。}
+\end{figure}
+
+\subsection{活动的风速分布 (Speed Distribution of Activities)}
+如15(b)所示，即使跌倒和非跌倒具有相同区间的最大速度，我们的系统也能通过它们随时间推移的独特模式将它们区分开来。
+
+\subsection{计算成本和实时实现 (Computational Cost and Realtime Realization)}
+如表 XI 所示，我们不需要大量数据来生成模板，显著降低了计算成本。总预训练耗时平均 8.9 秒，在线产生一个决策仅花费 0.0227 秒。
+
+% [此处预留表 XI]
+\begin{table}[htbp]
+\centering
+\caption{DeFall 的处理时间 (PROCESSING TIME OF DEFALL)}
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{l l c c}
+\toprule
+\textbf{阶段 (Stage)} & \textbf{模块 (Module)} & \textbf{CPU 时间 (s)} & \textbf{(\%)} \\
+\midrule
+\multirow{4}{2cm}{离线模板生成 (数据集大小: 40)} & 速度估计 & 8.571322 & 96.23 \\
+ & 数据库清理 & 0.168743 & 1.895 \\
+ & DBA 用于平均 & 0.165920 & 1.863 \\
+ & 2D 表示 & 0.001251 & 0.014 \\
+\cmidrule(lr){2-4}
+ & \textbf{总计} & \textbf{8.9072} & \\
+\midrule
+\multirow{4}{2cm}{每次输出的在线计算} & 运动检测 & 0.000535 & 2.355 \\
+ & 速度估计 & 0.004661 & 20.52 \\
+ & SLN-DTW \& 检测 & 0.017519 & 77.13 \\
+\cmidrule(lr){2-4}
+ & \textbf{总计} & \textbf{0.0227} & \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{局限性 (Limitation)}
+当前的系统关注可能造成严重伤害的硬跌倒（hard falls）。其他类型的跌倒（例如缓慢滑落）可能会产生不同的速度模式，需要未来结合动作分解和深度学习技术进行更深入的分析。此外，多人员近距离运动时的环境干扰也会影响系统性能，但这符合我们保护独居老人的初衷。
+
+\section{结论 (CONCLUSION)}
+在本文中，我们提出了DeFall，这是一种新颖的、独立于环境的使用商业WiFi设备的室内FD系统。该系统通过提取速度信息，甚至可以使用单对收发器穿墙检测跌倒。我们建立了一个真实的原型来验证其可行性并在不同环境中评估其性能。结果表明，在LOS和NLOS场景下，DeFall不仅实现了高于95\%的真实跌倒DR，还将FAR保持在1.50\%以下，且无需针对场景定制的先验训练。
+
+\begin{thebibliography}{99}
+\bibitem{1} Falls. Accessed: Apr. 2021. [Online]. Available: https://www.who.int/news-room/fact-sheets/detail/falls
+\bibitem{2} P. Melillo, R. Castaldo, G. Sannino, A. Orrico, G. de Pietro, and L. Pecchia, "Wearable technology and ECG processing for fall risk assessment, prevention and detection," in Proc. 37th Annu. Int. Conf. IEEE Eng. Med. Biol. Soc. (EMBC), 2015, pp. 7740-7743.
+\bibitem{3} P. Pierleoni, A. Belli, L. Maurizi, L. Palma, L. Pernini, M. Paniccia, and S. Valenti, "A wearable fall detector for elderly people based on AHRS and barometric sensor," IEEE Sensors J., vol. 16, no. 17. pp. 6733-6744, Sep. 2016.
+\bibitem{4} J. Wang, Z. Zhang, B. Li, S. Lee, and R. S. Sherratt, "An enhanced fall detection system for elderly person monitoring using consumer home networks," IEEE Trans. Consum. Electron., vol. 60, no. 1, pp. 23-29, Feb. 2014.
+\bibitem{5} J. Dai, X. Bai, Z. Yang, Z. Shen, and D. Xuan, "PerFallD: A pervasive fall detection system using mobile phones," in Proc. 8th IEEE Int. Conf. Pervasive Comput. Commun. Workshops (PERCOM Workshops), Mannheim, Germany, 2010, pp. 292-297.
+\bibitem{6} S. Abbate, M. Avvenuti, F. Bonatesta, G. Cola, P. Corsini, and A. Vecchio, "A smartphone-based fall detection system," Pervasive Mobile Comput., vol. 8, no. 6, pp. 883-899, 2012.
+\bibitem{7} C.-C. Lin, P.-Y. Lin, P.-K. Lu, G.-Y. Hsieh, W.-L. Lee, and R.-G. Lee, "A healthcare integration system for disease assessment and safety monitoring of dementia patients," IEEE Trans. Inf. Technol. Biomed., vol. 12, no. 5, pp. 579-586, Sep. 2008.
+\bibitem{8} E. Auvinet, F. Multon, A. Saint-Arnaud, J. Rousseau, and J. Meunier, "Fall detection with multiple cameras: An occlusion-resistant method based on 3-D silhouette vertical distribution," IEEE Trans. Inf. Technol. Biomed., vol. 15, no. 2, pp. 290-300, Mar. 2011.
+\bibitem{9} C. Rougier, J. Meunier, A. St-Arnaud, and J. Rousseau, "3D head tracking for fall detection using a single calibrated camera," Image Vis. Comput., vol. 31, no. 3, pp. 246-254, 2013.
+\bibitem{10} E. E. Stone and M. Skubic. "Fall detection in homes of older adults using the Microsoft Kinect," IEEE J. Biomed. Health Inform., vol. 19, no. 1, pp. 290-301, Jan. 2015.
+\bibitem{11} G. Mastorakis and D. Makris, "Fall detection system using Kinect's infrared sensor," J. Real Time Image Process., vol. 9, no. 4, pp. 635-646, 2014.
+\bibitem{12} S. Gasparrini, E. Cippitelli, S. Spinsante, and E. Gambi, "A depth-based fall detection system using a kinect sensor." Sensors, vol. 14, no. 2. pp. 2756-2775, 2014.
+\bibitem{13} X. Ma, H. Wang, B. Xue, M. Zhou, B. Ji, and Y. Li, "Depth-based human fall detection via shape features and improved extreme learning machine," IEEE J. Biomed. Health Informat., vol. 18, no. 6, pp. 1915-1922, Nov. 2014.
+\bibitem{14} B. Wang, Q. Xu, C. Chen, F. Zhang, and K. J. R. Liu, "The promise of radio analytics: A future paradigm of wireless positioning, tracking. and sensing," IEEE Signal Process. Mag., vol. 35, no. 3, pp. 59-80. May 2018.
+\bibitem{15} K. J. R. Liu and B. Wang, Wireless AI: Wireless Sensing, Positioning, IoT, and Communications. Cambridge, U.K.: Cambridge Univ. Press, 2019.
+\bibitem{16} B. Y. Su, K. C. Ho, M. J. Rantz, and M. Skubic, "Doppler radar fall activity detection using the wavelet transform," IEEE Trans. Biomed. Eng., vol. 62, no. 3, pp. 865-875, Mar. 2015.
+\bibitem{17} M. G. Amin, Y. D. Zhang, F. Ahmad, and K. C. D. Ho, "Radar signal processing for elderly fall detection: The future for in-home monitoring." IEEE Signal Process. Mag., vol. 33, no. 2, pp. 71-80, Mar. 2016.
+\bibitem{18} G. Mokhtari, Q. Zhang, and A. Fazlollahi, "Non-wearable UWB sensor to detect falls in smart home environment," in Proc. IEEE Int. Conf. Pervasive Comput. Commun. Workshops (PerCom Workshops), Kona, HI, USA, 2017, pp. 274-278.
+\bibitem{19} L. Ma, M. Liu, N. Wang, L. Wang, Y. Yang, and H. Wang. "Room-level fall detection based on ultra-wideband (UWB) monostatic radar and convolutional long short-term memory (LSTM)," Sensors, vol. 20, no. 4, p. 1105, 2020.
+\bibitem{20} Y. Wang, K. Wu, and L. M. Ni, "WiFall: Device-free fall detection by wireless networks," IEEE Trans. Mobile Comput., vol. 16, no. 2, pp. 581-594, Feb. 2017.
+\bibitem{21} H. Wang, D. Zhang, Y. Wang, J. Ma, Y. Wang, and S. Li, "RT-Fall: A real-time and contactless fall detection system with commodity WiFi devices," IEEE Trans. Mobile Comput., vol. 16, no. 2, pp. 511-526, Feb. 2017.
+\bibitem{22} S. Palipana, D. Rojas, P. Agrawal, and D. Pesch, "FallDeFi: Ubiquitous fall detection using commodity Wi-Fi devices," in Proc. ACM Interact. Mobile Wearable Ubiquitous Technol., vol. 1, no. 4, p. 155, 2018.
+\bibitem{23} L. Zhang, Z. Wang, and L. Yang, "Commercial Wi-Fi based fall detection with environment influence mitigation," in Proc. 16th Annu. IEEE Int. Conf. Sens. Commun. Netw. (SECON), Boston, MA, USA, 2019, pp. 1-9.
+\bibitem{24} F. Zhang, C. Chen, B. Wang, and K. J. R. Liu, "WiSpeed: A statistical electromagnetic approach for device-free indoor speed estimation," IEEE Internet Things J., vol. 5, no. 3, pp. 2163-2177, Jun. 2018.
+\bibitem{25} M. A. Al Hafiz Khan et al., "RAM: Radar-based activity monitor," in Proc. IEEE INFOCOM 35th Annu. IEEE Int. Conf. Comput. Commun., San Francisco, CA, USA, 2016, pp. 1-9.
+\bibitem{26} M. S. Seyfioglu, A. M. Ozbayoglu, and S. Z. Gurbuz, "Deep convolutional autoencoder for radar-based classification of similar aided and unaided human activities," IEEE Trans. Aerosp. Electron. Syst., vol. 54, no. 4, pp. 1709-1723, Aug. 2018.
+\bibitem{27} S. D. Regani, C. Wu, B. Wang, M. Wu, and K. J. R. Liu, "Mm Write: Passive handwriting tracking using a single millimeter-wave radio," IEEE Internet Things J., vol. 8, no. 17, pp. 13291-13305, Sep. 2021.
+\bibitem{28} Y. Gu, F. Ren, and J. Li, "PAWS: Passive human activity recognition based on WiFi ambient signals," IEEE Internet Things J., vol. 3, no. 5, pp. 796-805, Oct. 2016.
+\bibitem{29} S. Sigg. U. Blanke, and G. Troster, "The telepathic phone: Frictionless activity recognition from WiFi-RSSI," in Proc. IEEE Int. Conf. Pervasive Comput. Commun. (PerCom), Budapest, Hungary, 2014, pp. 148-155.
+\bibitem{30} S. Kianoush, S. Savazzi, F. Vicentini, V. Rampa, and M. Giussani, "Device-free RF human body fall detection and localization in industrial workplaces," IEEE Internet Things J., vol. 4, no. 2, pp. 351-362, Apr. 2017.
+\bibitem{31} S. Arshad et al., "Wi-chase: A WiFi based human activity recognition system for sensorless environments," in Proc. IEEE 18th Int. Symp. World Wireless Mobile Multimedia Netw. (WoWMoM), Macau, China, 2017. pp. 1-6.
+\bibitem{32} W. Wang, A. X. Liu, M. Shahzad, K. Ling, and S. Lu, "Device-free human activity recognition using commercial WiFi devices," IEEE J. Sel. Areas Commun., vol. 35, no. 5, pp. 1118-1131, May 2017.
+\bibitem{33} Q. Xu, Y. Chen, B. Wang, and K. J. R. Liu, "TRIEDS: Wireless events detection through the wall," IEEE Internet Things J., vol. 4, no. 3, pp. 723-735, Jun. 2017.
+\bibitem{34} Q. Chen, B. Tan, K. Chetty, and K. Woodbridge, "Activity recognition based on micro-doppler signature with in-home Wi-Fi," in Proc. IEEE 18th Int. Conf. e-Health Netw. Appl. Serv. (Healthcom), Munich, Germany, 2016, pp. 1-6.
+\bibitem{35} K. Chetty, G. E. Smith, and K. Woodbridge, "Through-the-wall sensing of personnel using passive bistatic WiFi radar at standoff distances," IEEE Trans. Geosci. Remote Sens., vol. 50, no. 4, pp. 1218-1226, Apr. 2012.
+\bibitem{36} W. Li, R. J. Piechocki, K. Woodbridge, C. Tang, and K. Chetty, "Passive WiFi radar for human sensing using a stand-alone access point," IEEE Trans. Geosci. Remote Sens., vol. 59, no. 3, pp. 1986-1998, Mar. 2021.
+\bibitem{37} Y. Kim and B. Toomajian, "Hand gesture recognition using micro-doppler signatures with convolutional neural network," IEEE Access, vol. 4, pp. 7125-7130, 2016.
+\bibitem{38} S. Bjorklund, H. Petersson, A. Nezirovic, M. B. Guldogan, and F. Gustafsson, "Millimeter-wave radar micro-doppler signatures of human motion," in Proc. 12th Int. Radar Symp. (IRS), Leipzig, Germany, 2011, pp. 167-174.
+\bibitem{39} M. Raja, Z. Vali, S. Palipana, D. G. Michelson, and S. Sigg, "3D head motion detection using millimeter-wave doppler radar," IEEE Access, vol. 8, pp. 32321-32331, 2020.
+\bibitem{40} Y. Tian, G.-H. Lee, H. He, C.-Y. Hsu, and D. Katabi, "RF-based fall monitoring using convolutional neural networks," in Proc. ACM Interact. Mobile Wearable Ubiquitous Technol., vol. 2, no. 3, pp. 1-24, 2018.
+\bibitem{41} C. Wu, F. Zhang, and Y. H. K. J. R. Liu, "Gaitway: Monitoring and recognizing gait speed through the walls," IEEE Trans. Mobile Comput., vol. 20, no. 6, pp. 2186-2199, Jun. 2021.
+\bibitem{42} Z. Yang, Z. Zhou, and Y. Liu, "From RSSI to CSI: Indoor localization via channel response." ACM Comput. Surveys, vol. 46, no. 2, pp. 1-32, 2013.
+\bibitem{43} R. Ramezani, Y. Xiao, and A. Naeim, "Sensing-Fi: Wi-Fi CSI and accelerometer fusion system for fall detection," in Proc. IEEE EMBS Int. Conf. Biomed. Health Inform. (BHI), Las Vegas, NV, USA, 2018, pp. 402-405.
+\bibitem{44} Y. Hu, F. Zhang, C. Wu. B. Wang, and K. J. R. Liu, "A WiFi-based passive fall detection system," in Proc. IEEE Int. Conf. Acoust. Speech Signal Process. (ICASSP), Barcelona, Spain, 2020, pp. 1723-1727.
+\bibitem{45} V. S. Staggs, L. C. Mion, and R. I. Shorr, "Assisted and unassisted falls: Different events, different outcomes, different implications for quality of hospital care," Joint Commission J. Qual. Patient Safety, vol. 40, no. 8, pp. 358-364, 2014.
+\bibitem{46} K. Qian, C. Wu, Z. Yang, Y. Liu, and K. Jamieson, "Widar: Decimeter-level passive tracking via velocity monitoring with commodity Wi-Fi," in Proc. 18th ACM Int. Symp. Mobile Ad Hoc Netw. Comput., 2017, p. 6.
+\bibitem{47} X. Li et al., "Indotrack: Device-free indoor human tracking with commodity Wi-Fi," in Proc. ACM Interact. Mobile Wearable Ubiquitous Technol., vol. 1, p. 72, Sep. 2017.
+\bibitem{48} K. Qian, C. Wu, Y. Zhang, G. Zhang, Z. Yang, and Y. Liu, "Widar2.0: Passive human tracking with a single Wi-Fi link," in Proc. 16th Annu. Int. Conf. Mobile Syst. Appl. Serv., 2018, pp. 350-361.
+\bibitem{49} C. Chen, Y. Chen, Y. Han, H.-Q. Lai, F. Zhang, and K. J. R. Liu, "Achieving centimeter-accuracy indoor localization on WiFi platforms: A multi-antenna approach," IEEE Internet Things J., vol. 4, no. 1, pp. 122-134, Feb. 2017.
+\bibitem{50} D. A. Hill, Electromagnetic Fields in Cavities: Deterministic and Statistical Theories, vol. 35. Hoboken, NJ, USA: Wiley, 2009.
+\bibitem{51} F. Zhang, C. Wu, B. Wang, H.-Q. Lai, Y. Han, and K. J. R. Liu, "WiDetect: Robust motion detection with a statistical electromagnetic model," in Proc. ACM Interact. Mobile Wearable Ubiquitous Technol., vol. 3, no. 3, pp. 1-24, 2019.
+\bibitem{52} H. Sakoe and S. Chiba, "Dynamic programming algorithm optimization for spoken word recognition," IEEE Trans. Acoust., Speech, Signal Process., vol. 26, no. 1, pp. 43-49, Feb. 1978.
+\bibitem{53} A. Muscariello, G. Gravier, and F. Bimbot, "Variability tolerant audio motif discovery," in Proc. Int. Conf. Multimedia Model., 2009, pp. 275-286.
+\bibitem{54} F. Petitjean, A. Ketterlin, and P. Gancarski, "A global averaging method for dynamic time warping, with applications to clustering," Pattern Recognit., vol. 44, no. 3, pp. 678-693, 2011.
+\bibitem{55} F. Petitjean, G. Forestier, G. I. Webb, A. E. Nicholson, Y. Chen, and E. Keogh, "Dynamic time warping averaging of time series allows faster and more accurate classification," in Proc. IEEE Int. Conf. Data Min., Shenzhen, China, 2014, pp. 470-479.
+\bibitem{56} D. Halperin, W. Hu, A. Sheth, and D. Wetherall, "Tool release: Gathering 802.11n traces with channel state information," SIGCOMM Comput. Commun. Rev., vol. 41, p. 53, Jan. 2011.
+\end{thebibliography}
+
+\begin{IEEEbiographynophoto}{Yuqian Hu} (Graduate Student Member, IEEE) 
+于2017年获得中国合肥中国科学技术大学电子工程与信息科学系学士学位。她目前正在马里兰大学帕克分校电气与计算机工程系攻读博士学位。她是Origin Wireless公司的研发实习生。她的研究兴趣包括物联网和无线传感。
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Feng Zhang} (Member, IEEE) 
+分别于2011年和2014年获得中国科学技术大学电子工程与信息科学系学士和硕士学位，并于2018年12月获得马里兰大学帕克分校电气与计算机工程系博士学位。他目前就职于西雅图的Amazon.com公司。在此之前，他就职于Origin Wireless公司。他的研究兴趣包括机器学习、信号处理和物联网。张博士是2020年IEEE Internet of Things Journal最佳论文奖的获得者。
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Chenshu Wu} (Senior Member, IEEE) 
+于2010年获得清华大学软件学院学士学位，并于2015年获得清华大学计算机科学博士学位。他目前是香港大学计算机科学系的助理教授。他还是Origin Wireless公司的首席科学家。他的研究主要集中在无线传感、普适计算、数字健康和物联网交叉领域的无线AIoT系统。吴博士是ACM成员。
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{Beibei Wang} (Senior Member, IEEE) 
+于2004年获得中国科学技术大学电气工程荣誉学士学位，并于2009年获得马里兰大学帕克分校电气工程博士学位。她于2009年至2010年担任马里兰大学副研究员，并于2010年至2014年就职于高通研发部门。自2015年以来，她一直在Origin Wireless公司工作，目前担任研发副总裁。她还隶属于马里兰大学帕克分校。她合著了《认知无线电网络与安全：博弈论视角》和《无线AI：无线传感、定位、物联网与通信》。她的研究兴趣包括物联网、移动计算、无线传感与定位以及通信和网络。王博士曾获得2020年IEEE Internet of Things Journal最佳论文奖、2015年IEEE信号处理学会概述论文奖，以及马里兰大学的多项研究和发明奖项。她曾担任IEEE SIGNAL PROCESSING LETTERS、IEEE INTERNET OF THINGS JOURNAL和IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS的编委。
+\end{IEEEbiographynophoto}
+
+\begin{IEEEbiographynophoto}{K. J. Ray Liu} (Fellow, IEEE) 
+是马里兰大学帕克分校的杰出大学教授和杰出学者型教师，他也是Christine Kim信息技术杰出教授。他领导马里兰信号与信息小组开展涵盖信息和通信技术广泛领域的研究，近期重点是用于室内跟踪和无线传感的无线AI。刘博士获得了马里兰大学的教学和研究认可，包括大学级年度发明奖以及工程学院的多项杰出教职工奖。他曾获得两项IEEE技术领域奖：2021年IEEE傅里叶信号处理奖和2016年IEEE Leon K. Kirchmayer研究生教学奖、IEEE信号处理学会2009年技术成就奖、IEEE信号处理学会2014年学会奖，以及十几项最佳论文/发明奖。作为Origin Wireless的创始人，他的发明赢得了2017年CEATEC大奖和三项CES创新奖，包括2021年CES最佳创新奖。他是2021年IEEE候任主席。他曾担任IEEE副主席（技术活动），并作为第九区主任担任IEEE董事会成员。他还曾担任IEEE信号处理学会主席。被Web of Science认可为高被引研究员，他是AAAS和美国国家发明家学院的研究员（Fellow）。
+\end{IEEEbiographynophoto}
+
+\end{document}
