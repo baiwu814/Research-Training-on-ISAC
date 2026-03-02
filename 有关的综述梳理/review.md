@@ -240,21 +240,6 @@ $$
 这与上面的 CSI 静/动分解在思想上一致。
 > 出自文献《WiCPD: Wireless Child Presence Detection System for Smart Cars》
 ---
-
-### 统一形式：CSI 的“静态散射体集合 + 动态散射体集合”分解
-
-此外，还可以给出同样的电磁叠加分解（更贴近 CSI 形式）：
-
-$$
-H(t,f)=\sum_{i\in\Omega_s(t)} H_i(t,f)+\sum_{j\in\Omega_d(t)} H_j(t,f)+\varepsilon(t,f)
-$$
-
-关键解释（ISAC 统一建模的核心点）：
-- $\Omega_s(t)$：静态散射体集合（墙/地面/固定家具）
-- $\Omega_d(t)$：动态散射体集合（人体/宠物/机器人/呼吸胸腔）
-- 每个散射体贡献一个“虚拟发射源”的电磁叠加项（把室内多径理解为巨量虚拟传感器）
-> 出自文献《Wi-MoID: Human and Nonhuman Motion Discrimination Using WiFi With Edge Computing》
----
 ##  二阶统计量：ACF(自相关函数) 与 TRRS（时间反演）
 
   
